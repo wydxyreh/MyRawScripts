@@ -13,7 +13,7 @@ class MyCharacter(ue.Character):
         self.EnableInput(controller)
 
         # 设置Enhanced Input组件
-        # self.setup_enhanced_input(controller)
+        self.setup_enhanced_input(controller)
 
         # 移动
         self.InputComponent.BindAxis('MoveForward', self._move_forward)
@@ -25,7 +25,12 @@ class MyCharacter(ue.Character):
 
         # 跳跃
         self.InputComponent.BindAction('Jump', ue.EInputEvent.IE_Pressed, self._jump)
-
+        
+        # 直接添加Shift键的绑定
+        self.InputComponent.BindKey("LeftShift", ue.EInputEvent.IE_Pressed, self._run_start)
+        self.InputComponent.BindKey("LeftShift", ue.EInputEvent.IE_Released, self._run_stop)
+        ue.LogWarning("在ReceiveBeginPlay中直接绑定LeftShift键成功")
+        
         # 枪械
         self.weapon = None
         self.InputComponent.BindAction('Fire', ue.EInputEvent.IE_Pressed, self._fire)
@@ -58,63 +63,44 @@ class MyCharacter(ue.Character):
             # 4. 调整SpringArm相对位置和旋转
             spring_arm.SetRelativeLocation(ue.Vector(0, 0, 88))  # 调整到合适的高度，与网格体原点位置相关
 
+        # 设置鼠标灵敏度
+        self.MouseSpeed = 45.0  # 添加鼠标灵敏度属性
+
     def setup_enhanced_input(self, controller):
         ue.LogWarning(f"Hello setup_enhanced_input, {self}!")
         """设置Enhanced Input系统"""
-        # 检查控制器是否有EnhancedInputLocalPlayerSubsystem
-        subsystem = controller.GetLocalPlayer().GetSubsystem(ue.EnhancedInputLocalPlayerSubsystem.StaticClass())
-        if not subsystem:
-            ue.LogError("EnhancedInputLocalPlayerSubsystem不可用")
+        
+        # 检查控制器是否有Enhanced Input组件
+        if hasattr(controller, "EnhancedInputComponent"):
+            enh_input = controller.EnhancedInputComponent
+            ue.LogWarning("成功获取EnhancedInputComponent")
+        elif hasattr(controller, "InputComponent"):
+            # 尝试确定是否是EnhancedInputComponent
+            enh_input = controller.InputComponent
+            if hasattr(enh_input, "BindAction"):
+                ue.LogWarning("使用常规InputComponent")
+            else:
+                ue.LogError("InputComponent不支持绑定动作")
+                return
+        else:
+            ue.LogError("无法获取任何InputComponent")
             return
-            
-        # 清除映射，防止重复
-        subsystem.ClearMappingContext()
+                
+        # 设置默认行走和奔跑速度
+        self.CharacterMovement.MaxWalkSpeed = 600.0  # 默认行走速度
+        ue.LogWarning(f"初始行走速度设置为: {self.CharacterMovement.MaxWalkSpeed}")
         
-        # 加载输入映射上下文
-        input_mapping_context = ue.LoadObject(
-            ue.InputMappingContext.StaticClass(),
-            "/Game/ThirdPerson/Input/IMC_Default.IMC_Default"
-        )
-        if not input_mapping_context:
-            ue.LogError("无法加载输入映射上下文")
+        try:
+            # Enhanced Input 绑定
+            if hasattr(enh_input, "BindActionByName"):
+                enh_input.BindActionByName("MyRun", ue.EInputEvent.IE_Pressed, self._run_start)
+                enh_input.BindActionByName("MyRun", ue.EInputEvent.IE_Released, self._run_stop)
+                ue.LogWarning("使用Enhanced Input特有方法绑定成功")
+        except Exception as e:
+            ue.LogError(f"绑定动作失败: {str(e)}")
             return
         
-        # 将映射上下文添加到子系统
-        subsystem.AddMappingContext(input_mapping_context, 0)
-        
-        # 获取Enhanced Input组件
-        enhanced_input = controller.FindComponentByClass(ue.EnhancedInputComponent.StaticClass())
-        if not enhanced_input:
-            ue.LogError("无法获取EnhancedInputComponent")
-            return
-            
-        # 加载Input Actions
-        move_action = ue.LoadObject(
-            ue.InputAction.StaticClass(),
-            "/Game/ThirdPerson/Input/Actions/IA_Move.IA_Move"
-        )
-        look_action = ue.LoadObject(
-            ue.InputAction.StaticClass(),
-            "/Game/ThirdPerson/Input/Actions/IA_Look.IA_Look"
-        )
-        jump_action = ue.LoadObject(
-            ue.InputAction.StaticClass(),
-            "/Game/ThirdPerson/Input/Actions/IA_Jump.IA_Jump"
-        )
-        fire_action = ue.LoadObject(
-            ue.InputAction.StaticClass(),
-            "/Game/ThirdPerson/Input/Actions/IA_Fire.IA_Fire"
-        )
-        
-        # 绑定Input Actions到回调函数
-        if move_action:
-            enhanced_input.BindAction(move_action, ue.ETriggerEvent.Triggered, self, "_on_move")
-        if look_action:
-            enhanced_input.BindAction(look_action, ue.ETriggerEvent.Triggered, self, "_on_look")
-        if jump_action:
-            enhanced_input.BindAction(jump_action, ue.ETriggerEvent.Triggered, self, "_on_jump")
-        if fire_action:
-            enhanced_input.BindAction(fire_action, ue.ETriggerEvent.Triggered, self, "_on_fire")
+        ue.LogWarning("输入系统设置完成")
     
     @ue.ufunction
     def MyNewFunction(self):
@@ -229,3 +215,24 @@ class MyCharacter(ue.Character):
     def _fire(self):
         if self.weapon:
             self.weapon.fire()
+    
+    # 奔跑功能
+    def _run_start(self, value=None):
+        """开始奔跑时设置较高的移动速度"""
+        ue.LogWarning(f"_run_start 被调用! 参数值: {value}")
+        if hasattr(self, 'CharacterMovement'):
+            old_speed = self.CharacterMovement.MaxWalkSpeed
+            self.CharacterMovement.MaxWalkSpeed = 1200.0
+            ue.LogWarning(f"开始奔跑 - 速度从{old_speed}更改为1200")
+        else:
+            ue.LogError("无法找到CharacterMovement组件")
+    
+    def _run_stop(self, value=None):
+        """停止奔跑时恢复正常移动速度"""
+        ue.LogWarning(f"_run_stop 被调用! 参数值: {value}")
+        if hasattr(self, 'CharacterMovement'):
+            old_speed = self.CharacterMovement.MaxWalkSpeed
+            self.CharacterMovement.MaxWalkSpeed = 600.0
+            ue.LogWarning(f"停止奔跑 - 速度从{old_speed}更改为600")
+        else:
+            ue.LogError("无法找到CharacterMovement组件")
