@@ -8,9 +8,15 @@ class MyRifle(ue.Actor):
         pick_up = self.PickUp # type: ue.SphereComponent
         pick_up.OnComponentBeginOverlap.Add(self._on_pick_up)
         
+        # 尝试加载子弹类
         # self.bullet_class = ue.LoadClass('/Game/ThirdPersonCPP/Blueprints/Bullet/MyBulletBP.MyBulletBP_C')
         self.bullet_class = ue.LoadClass('/Game/ThirdPersonCPP/Blueprints/Bullet/SharpBullet.SharpBullet_C')
-        self.bullet_class.OwnByPython()
+        
+        # 增加错误检查
+        if self.bullet_class:
+            self.bullet_class.OwnByPython()
+        else:
+            ue.LogError(f"{self}: 无法加载子弹类 '/Game/ThirdPersonCPP/Blueprints/Bullet/SharpBullet.SharpBullet_C'")
 
     def _on_pick_up(self, overlapped_comp, other_actor, other_comp, other_body_index, from_sweep, sweepresult):
         # type: (ue.PrimitiveComponent, ue.Actor, ue.PrimitiveComponent, int, bool, ue.HitResult) -> None

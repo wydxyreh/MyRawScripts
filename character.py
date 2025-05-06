@@ -7,11 +7,10 @@ class MyCharacter(ue.Character):
     def ReceiveBeginPlay(self):
         ue.LogWarning('%s Character ReceiveBeginPlay!' % self)
         
-        controller = self.GetWorld().GetFirstPlayerController()
-        if controller:
-            controller.UnPossess()
-            controller.Possess(self)
-            self.EnableInput(controller)
+        controller = self.GetWorld().GetPlayerController()
+        controller.UnPossess()
+        controller.Possess(self)
+        self.EnableInput(controller)
 
         # 设置Enhanced Input组件
         # self.setup_enhanced_input(controller)
@@ -21,22 +20,20 @@ class MyCharacter(ue.Character):
         # self.InputComponent.BindAxis('MoveRight', self._move_right)
 
         # 鼠标转向
-        if self.InputComponent:
-            self.InputComponent.BindAxis('Turn', self._turn_right)
-            self.InputComponent.BindAxis('LookUp', self._look_up)
+        self.InputComponent.BindAxis('Turn', self._turn_right)
+        self.InputComponent.BindAxis('LookUp', self._look_up)
 
-            # 跳跃
-            self.InputComponent.BindAction('Jump', ue.EInputEvent.IE_Pressed, self._jump)
+        # 跳跃
+        self.InputComponent.BindAction('Jump', ue.EInputEvent.IE_Pressed, self._jump)
 
-            # 枪械
-            self.weapon = None
-            self.InputComponent.BindAction('Fire', ue.EInputEvent.IE_Pressed, self._fire)
+        # 枪械
+        self.weapon = None
+        self.InputComponent.BindAction('Fire', ue.EInputEvent.IE_Pressed, self._fire)
         
-        # 配置角色移动和旋转
-        if hasattr(self, 'CharacterMovement'):
-            self.CharacterMovement.bOrientRotationToMovement = True  # 角色朝向移动方向
-            self.bUseControllerRotationYaw = False  # 禁用控制器Yaw旋转控制角色
-            self.CharacterMovement.RotationRate = ue.FRotator(0, 540, 0)  # 调整旋转速度
+         # 配置角色移动和旋转
+        self.CharacterMovement.bOrientRotationToMovement = True  # 角色朝向移动方向
+        self.bUseControllerRotationYaw = False  # 禁用控制器Yaw旋转控制角色
+        # self.CharacterMovement.RotationRate = ue.FRotator(0, 540, 0)  # 调整旋转速度（0, 540, 0）
 
     def setup_enhanced_input(self, controller):
         ue.LogWarning(f"Hello setup_enhanced_input, {self}!")
