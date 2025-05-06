@@ -16,8 +16,8 @@ class MyCharacter(ue.Character):
         # self.setup_enhanced_input(controller)
 
         # 移动
-        # self.InputComponent.BindAxis('MoveForward', self._move_forward)
-        # self.InputComponent.BindAxis('MoveRight', self._move_right)
+        self.InputComponent.BindAxis('MoveForward', self._move_forward)
+        self.InputComponent.BindAxis('MoveRight', self._move_right)
 
         # 鼠标转向
         self.InputComponent.BindAxis('Turn', self._turn_right)
@@ -30,10 +30,10 @@ class MyCharacter(ue.Character):
         self.weapon = None
         self.InputComponent.BindAction('Fire', ue.EInputEvent.IE_Pressed, self._fire)
         
-        # 配置角色移动和旋转
+        # 配置角色移动和旋转 - 针对相机方向移动进行优化
         self.CharacterMovement.bOrientRotationToMovement = True  # 角色朝向移动方向
         self.bUseControllerRotationYaw = False  # 禁用控制器Yaw旋转控制角色
-        # self.CharacterMovement.RotationRate = ue.FRotator(0, 540, 0)  # 调整旋转速度（0, 540, 0）
+        self.CharacterMovement.RotationRate = ue.Rotator(0, 540, 0)  # 较高的旋转速度，让角色更快地转向移动方向
         
         # 配置摄像机以角色Mesh为中心旋转
         # 1. 获取SpringArm和Camera组件
@@ -120,14 +120,41 @@ class MyCharacter(ue.Character):
     def MyNewFunction(self):
         ue.LogWarning('%s Character MyNewFunction!' % self)
 
-    # 移动
+    # 移动 - 以相机方向为中心
     def _move_forward(self, value):
         if value != 0:
-            self.AddMovementInput(self.GetActorForwardVector(), value)
+            # 获取控制器的旋转（即相机的方向）
+            controller_rotation = self.Controller.GetControlRotation()
+            # 只使用Yaw旋转创建新的旋转器（保持水平平面移动）
+            yaw_rotation = ue.Rotator(0.0, controller_rotation.Yaw, 0.0)
+            # 从旋转器获取前进方向向量 - 使用正确的数学库函数
+            if hasattr(ue, "KismetMathLibrary"):
+                # 如果存在KismetMathLibrary
+                forward_direction = ue.KismetMathLibrary.GetForwardVector(yaw_rotation)
+            else:
+                # 备选方案：使用旋转直接获取前向向量
+                # 在一些版本的NePythonBinding中可能不需要通过KismetMathLibrary
+                forward_direction = yaw_rotation.GetForwardVector()
+            
+            # 应用移动输入
+            self.AddMovementInput(forward_direction, value)
 
     def _move_right(self, value):
         if value != 0:
-            self.AddMovementInput(self.GetActorRightVector(), value)
+            # 获取控制器的旋转（即相机的方向）
+            controller_rotation = self.Controller.GetControlRotation()
+            # 只使用Yaw旋转创建新的旋转器（保持水平平面移动）
+            yaw_rotation = ue.Rotator(0.0, controller_rotation.Yaw, 0.0)
+            # 从旋转器获取右方向向量 - 使用正确的数学库函数
+            if hasattr(ue, "KismetMathLibrary"):
+                # 如果存在KismetMathLibrary
+                right_direction = ue.KismetMathLibrary.GetRightVector(yaw_rotation)
+            else:
+                # 备选方案：使用旋转直接获取右向向量
+                right_direction = yaw_rotation.GetRightVector()
+                
+            # 应用移动输入
+            self.AddMovementInput(right_direction, value)
     
     # 鼠标转向
     def _turn_right(self, value):
@@ -142,19 +169,38 @@ class MyCharacter(ue.Character):
     def _jump(self):
         self.Jump()
 
-    # Enhanced Input回调函数
+    # Enhanced Input回调函数 - 以相机方向为中心
     def _on_move(self, value):
         # 获取value中的输入值 (FInputActionValue)
         input_value = value.Get()
         
-        if isinstance(input_value, ue.FVector2D):
-            # 前进/后退
-            forward_direction = self.GetActorForwardVector()
-            right_direction = self.GetActorRightVector()
+        # 在NePythonBinding中Vector2D代替FVector2D
+        if hasattr(ue, "Vector2D") and isinstance(input_value, ue.Vector2D):
+            vector2d_type = ue.Vector2D
+        elif hasattr(ue, "FVector2D") and isinstance(input_value, ue.FVector2D):
+            vector2d_type = ue.FVector2D
+        else:
+            # 不能确定具体类型，尝试直接使用
+            # 假设输入值有X和Y属性
+            x_value = getattr(input_value, "X", 0)
+            y_value = getattr(input_value, "Y", 0)
+            
+            # 获取控制器的旋转（即相机的方向）
+            controller_rotation = self.Controller.GetControlRotation()
+            # 只使用Yaw旋转创建新的旋转器
+            yaw_rotation = ue.Rotator(0.0, controller_rotation.Yaw, 0.0)
+            
+            # 从旋转器获取前进和右方向向量
+            if hasattr(ue, "KismetMathLibrary"):
+                forward_direction = ue.KismetMathLibrary.GetForwardVector(yaw_rotation)
+                right_direction = ue.KismetMathLibrary.GetRightVector(yaw_rotation)
+            else:
+                forward_direction = yaw_rotation.GetForwardVector()
+                right_direction = yaw_rotation.GetRightVector()
             
             # 添加移动输入
-            self.AddMovementInput(forward_direction, input_value.Y)
-            self.AddMovementInput(right_direction, input_value.X)
+            self.AddMovementInput(forward_direction, y_value)
+            self.AddMovementInput(right_direction, x_value)
     
     def _on_look(self, value):
         input_value = value.Get()
