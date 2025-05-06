@@ -4,15 +4,6 @@ import ue
 @ue.uclass()
 class MyCharacter(ue.Character):
     @ue.ufunction(override=True)
-    # 声明组件属性
-    @ue.uproperty(VisibleAnywhere=True, BlueprintReadOnly=True, Category="Camera")
-    def CameraBoom(self): 
-        return None
-        
-    @ue.uproperty(VisibleAnywhere=True, BlueprintReadOnly=True, Category="Camera")
-    def FollowCamera(self): 
-        return None
-    
     def ReceiveBeginPlay(self):
         ue.LogWarning('%s Character ReceiveBeginPlay!' % self)
         
@@ -104,31 +95,6 @@ class MyCharacter(ue.Character):
             enhanced_input.BindAction(jump_action, ue.ETriggerEvent.Triggered, self, "_on_jump")
         if fire_action:
             enhanced_input.BindAction(fire_action, ue.ETriggerEvent.Triggered, self, "_on_fire")
-    
-    @ue.ufunction(override=True)
-    def OnConstruction(self, transform):
-        """在角色构建时设置摄像机组件"""
-        super().OnConstruction(transform)
-        self._setup_camera()
-    
-    def _setup_camera(self):
-        """设置摄像机和弹簧臂组件"""
-        # 创建弹簧臂组件
-        if not self.CameraBoom:
-            self.CameraBoom = ue.USpringArmComponent(self)
-            self.CameraBoom.SetupAttachment(self.RootComponent)
-            self.CameraBoom.TargetArmLength = 300.0  # 摄像机距离角色的距离
-            self.CameraBoom.bUsePawnControlRotation = True  # 弹簧臂随着控制器旋转
-            self.CameraBoom.bInheritPitch = True
-            self.CameraBoom.bInheritYaw = True
-            self.CameraBoom.bInheritRoll = False
-            self.CameraBoom.SocketOffset = ue.FVector(0, 0, 50)  # 摄像机高度偏移
-        
-        # 创建摄像机组件
-        if not self.FollowCamera:
-            self.FollowCamera = ue.UCameraComponent(self)
-            self.FollowCamera.SetupAttachment(self.CameraBoom, "SpringEndpoint")  # 将摄像机附加到弹簧臂末端
-            self.FollowCamera.bUsePawnControlRotation = False  # 摄像机不随弹簧臂旋转
     
     @ue.ufunction
     def MyNewFunction(self):
