@@ -30,10 +30,33 @@ class MyCharacter(ue.Character):
         self.weapon = None
         self.InputComponent.BindAction('Fire', ue.EInputEvent.IE_Pressed, self._fire)
         
-         # 配置角色移动和旋转
+        # 配置角色移动和旋转
         self.CharacterMovement.bOrientRotationToMovement = True  # 角色朝向移动方向
         self.bUseControllerRotationYaw = False  # 禁用控制器Yaw旋转控制角色
         # self.CharacterMovement.RotationRate = ue.FRotator(0, 540, 0)  # 调整旋转速度（0, 540, 0）
+        
+        # 配置摄像机以角色Mesh为中心旋转
+        # 1. 获取SpringArm和Camera组件
+        spring_arm_class = ue.FindClass("SpringArmComponent")  # 使用FindClass获取类引用
+        camera_class = ue.FindClass("CameraComponent")  # 使用FindClass获取类引用
+        
+        spring_arm = self.GetComponentByClass(spring_arm_class)  # 获取SpringArm组件
+        camera = self.GetComponentByClass(camera_class)  # 获取Camera组件
+        
+        if spring_arm and self.Mesh:
+            # 2. 将SpringArm附着到角色Mesh而不是CapsuleComponent
+            spring_arm.DetachFromComponent(ue.EDetachmentRule.KeepWorld)  # 先分离
+            spring_arm.AttachToComponent(self.Mesh, "", ue.EAttachmentRule.SnapToTarget, 
+                                        ue.EAttachmentRule.SnapToTarget, ue.EAttachmentRule.SnapToTarget, True)
+            
+            # 3. 配置SpringArm旋转设置
+            spring_arm.bUsePawnControlRotation = True  # 使用Pawn的控制器旋转
+            spring_arm.bInheritPitch = True
+            spring_arm.bInheritYaw = True
+            spring_arm.bInheritRoll = False
+            
+            # 4. 调整SpringArm相对位置和旋转
+            spring_arm.SetRelativeLocation(ue.Vector(0, 0, 88))  # 调整到合适的高度，与网格体原点位置相关
 
     def setup_enhanced_input(self, controller):
         ue.LogWarning(f"Hello setup_enhanced_input, {self}!")
