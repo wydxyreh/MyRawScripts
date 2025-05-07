@@ -71,13 +71,16 @@ class MyCharacter(ue.Character):
         # 跳跃
         self.InputComponent.BindAction('Jump', ue.EInputEvent.IE_Pressed, self._jump)
         
-        # 直接添加Shift键的绑定
+        # 添加Shift键的绑定
         self.InputComponent.BindKey("LeftShift", ue.EInputEvent.IE_Pressed, self._run_start)
         self.InputComponent.BindKey("LeftShift", ue.EInputEvent.IE_Released, self._run_stop)
         ue.LogWarning("在ReceiveBeginPlay中直接绑定LeftShift键成功")
         
+        # 添加R键换弹的绑定
+        self.InputComponent.BindKey("R", ue.EInputEvent.IE_Pressed, self._reload_weapon)
+        ue.LogWarning("在ReceiveBeginPlay中直接绑定R键换弹成功")
+
         # 枪械
-        self.weapon = None
         self.InputComponent.BindAction('Fire', ue.EInputEvent.IE_Pressed, self._fire)
         
         # 配置角色移动和旋转 - 针对相机方向移动进行优化
@@ -138,8 +141,12 @@ class MyCharacter(ue.Character):
         try:
             # Enhanced Input 绑定
             if hasattr(enh_input, "BindActionByName"):
+                # 添加跑步动作的增强型输入绑定
                 enh_input.BindActionByName("MyRun", ue.EInputEvent.IE_Pressed, self._run_start)
                 enh_input.BindActionByName("MyRun", ue.EInputEvent.IE_Released, self._run_stop)
+                ue.LogWarning("使用Enhanced Input特有方法绑定成功")
+                # 添加换弹动作的增强型输入绑定
+                enh_input.BindActionByName("MyReload", ue.EInputEvent.IE_Pressed, self._reload_weapon)
                 ue.LogWarning("使用Enhanced Input特有方法绑定成功")
         except Exception as e:
             ue.LogError(f"绑定动作失败: {str(e)}")
@@ -281,3 +288,62 @@ class MyCharacter(ue.Character):
             ue.LogWarning(f"停止奔跑 - 速度从{old_speed}更改为600")
         else:
             ue.LogError("无法找到CharacterMovement组件")
+    
+    def _reload_weapon(self, value=None):
+        """换弹功能 - 按R键触发"""
+        ue.LogWarning(f"_reload_weapon 被调用! 参数值: {value}")
+        
+        # 检查是否有武器
+        if not hasattr(self, 'weapon') or self.weapon is None:
+            ue.LogWarning("没有装备武器，无法换弹")
+            return
+        
+        # 获取当前弹药数
+        current_weapon_ammo = self.MyWeaopnBulletNumber
+        current_total_ammo = self.MyAllBulletNumber
+        
+        # 计算需要补充的弹药数量
+        max_weapon_capacity = 20
+        ammo_needed = max_weapon_capacity - current_weapon_ammo
+        
+        if ammo_needed <= 0:
+            ue.LogWarning("弹匣已满，无需换弹")
+            return
+        
+        # 使用AnimBP PlayMontage功能
+        try:
+            # 获取换弹动画蒙太奇
+            reload_montage = ue.LoadObject(ue.AnimMontage.Class(), 
+                '/Game/Mannequin/Animations/My_Reload_Rifle_Hip1_Montage.My_Reload_Rifle_Hip1_Montage')
+            
+            if reload_montage and hasattr(self, 'Mesh'):
+                # 使用PlayMontage，相当于蓝图中的PlayMontage节点
+                if hasattr(ue, 'AnimInstance'):
+                    # 获取动画实例
+                    anim_instance = self.Mesh.GetAnimInstance()
+                    if anim_instance:
+                        # 播放动画蒙太奇
+                        play_rate = 1.0
+                        anim_instance.Montage_Play(reload_montage, play_rate)
+                        # 可以在这里设置动画通知回调
+                        ue.LogWarning("成功播放换弹动画蒙太奇")
+                    else:
+                        ue.LogWarning("无法获取角色的动画实例")
+                else:
+                    ue.LogWarning("ue模块中没有AnimInstance类")
+            else:
+                ue.LogWarning("无法加载换弹动画蒙太奇或角色网格体不可用")
+        except Exception as e:
+            ue.LogError(f"播放换弹动画失败: {str(e)}")
+            
+        # 检查总弹药是否足够
+        if current_total_ammo >= ammo_needed:
+            # 总弹药充足，补充到最大容量
+            self.MyAllBulletNumber -= ammo_needed
+            self.MyWeaopnBulletNumber = max_weapon_capacity
+            ue.LogWarning(f"换弹完成：消耗{ammo_needed}发弹药，弹匣装填至{self.MyWeaopnBulletNumber}发，剩余总弹药{self.MyAllBulletNumber}发")
+        else:
+            # 总弹药不足，将所有剩余弹药装入武器
+            self.MyWeaopnBulletNumber += current_total_ammo
+            self.MyAllBulletNumber = 0
+            ue.LogWarning(f"弹药不足：将剩余{current_total_ammo}发弹药全部装入，当前弹匣{self.MyWeaopnBulletNumber}发，总弹药已耗尽")
