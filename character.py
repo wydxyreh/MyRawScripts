@@ -3,6 +3,9 @@ import ue
 
 @ue.uclass()
 class MyCharacter(ue.Character):
+    # 添加弹药数属性
+    MyBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    
     @ue.ufunction(override=True)
     def ReceiveBeginPlay(self):
         ue.LogWarning('%s Character ReceiveBeginPlay!' % self)
