@@ -5,22 +5,36 @@ class MyCharacter(ue.Character):
     # 添加弹药数属性
     MyAllBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
     MyWeaopnBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+
+    @ue.ufunction(BlueprintCallable=True, BlueprintImplementableEvent=True, Category="Ammunition")
+    def AddAmmunitionFromItem(self):
+        """
+        从物品中获取弹药的自定义事件
+        这是一个可在蓝图中实现的事件，可以被Python代码调用
+        在蓝图中会自动获取到一个整数参数
+        """
+        pass
     
+    @ue.ufunction(params=(int,float))
+    def FuncA(self,IntParams,FloatParams):
+        pass
+
     @ue.ufunction(BlueprintCallable=True, Category="Ammunition")
     def AddAmmunition(self):
         """
         获得弹药函数，蓝图中会传入一个参数，但在Python定义中不显式声明
         注意：调用时需要在蓝图中传递一个整数参数
+        
+        在蓝图中调用时，这个函数会接受一个整数参数，表示要添加的弹药数量。
+        函数返回更新后的总弹药数量。
         """
         # 通过上下文获取传入的弹药数量
         # 在实际调用时，这个参数会被传递，尽管我们在这里没有声明它
-        # 我们假设传入的是第一个参数
         import inspect
         # 获取当前帧和调用帧
         frame = inspect.currentframe()
         
         # 尝试从局部变量中获取传入的参数
-        # 注：这是一个hacky方法，可能在某些情况下不可靠
         try:
             # 假设传入的第一个参数存储在某个位置
             if len(frame.f_locals) > 1:
@@ -42,6 +56,15 @@ class MyCharacter(ue.Character):
         # 更新角色的弹药数量
         old_ammo = self.MyAllBulletNumber
         self.MyAllBulletNumber += ammo_count
+        
+        # 尝试调用可在蓝图中实现的事件，传递添加的弹药数量
+        try:
+            # 触发事件，让蓝图有机会响应弹药变化
+            if hasattr(self, 'AddAmmunitionFromItem'):
+                self.AddAmmunitionFromItem()
+                ue.LogWarning("成功触发AddAmmunitionFromItem事件")
+        except Exception as e:
+            ue.LogWarning(f"触发事件失败: {str(e)}")
         
         # 打印日志信息
         ue.LogWarning(f"获得弹药: +{ammo_count}, 旧弹药数: {old_ammo}, 新弹药数: {self.MyAllBulletNumber}")
