@@ -6,7 +6,7 @@ class MyCharacter(ue.Character):
     MyAllBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
     MyWeaopnBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
 
-    @ue.ufunction(BlueprintCallable=True, BlueprintImplementableEvent=True, Category="Ammunition")
+    @ue.ufunction(BlueprintCallable=True, Category="Ammunition")
     def AddAmmunitionFromItem(self):
         """
         从物品中获取弹药的自定义事件
@@ -74,6 +74,13 @@ class MyCharacter(ue.Character):
     @ue.ufunction(override=True)
     def ReceiveBeginPlay(self):
         ue.LogWarning('%s Character ReceiveBeginPlay!' % self)
+
+        # 导入protobuf
+        import sys
+        sys.path.append("C:\\Users\\wydx\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\site-packages")
+
+        # 确保weapon属性初始化为None
+        self.weapon = None
         
         controller = self.GetWorld().GetPlayerController()
         controller.UnPossess()
@@ -103,8 +110,15 @@ class MyCharacter(ue.Character):
         self.InputComponent.BindKey("R", ue.EInputEvent.IE_Pressed, self._reload_weapon)
         ue.LogWarning("在ReceiveBeginPlay中直接绑定R键换弹成功")
 
+        # 添加L键触发登录的绑定
+        self.InputComponent.BindKey("L", ue.EInputEvent.IE_Pressed, self._trigger_login)
+        ue.LogWarning("在ReceiveBeginPlay中直接绑定L键登录成功")
+
         # 枪械
         self.InputComponent.BindAction('Fire', ue.EInputEvent.IE_Pressed, self._fire)
+        
+        # 初始化玩家数据 - 尝试从服务器加载
+        self._initialize_player_data()
         
         # 配置角色移动和旋转 - 针对相机方向移动进行优化
         self.CharacterMovement.bOrientRotationToMovement = True  # 角色朝向移动方向
@@ -137,6 +151,248 @@ class MyCharacter(ue.Character):
         # 设置鼠标灵敏度
         self.MouseSpeed = 45.0  # 添加鼠标灵敏度属性
 
+    # 网络功能 - 玩家数据相关
+    def _initialize_player_data(self):
+        """初始化玩家数据"""
+        try:
+            # 导入网络模块
+            import sys
+            import os
+            
+            # 确保网络模块路径在Python路径中
+            scripts_dir = os.path.dirname(os.path.abspath(__file__))
+            network_path = os.path.join(scripts_dir, "Network")
+            if network_path not in sys.path:
+                sys.path.append(network_path)
+                ue.LogWarning(f"[网络] 在character模块中添加网络路径: {network_path}")
+            
+            import ue_site
+            
+            # 检查网络模块是否导入成功
+            if not hasattr(ue_site, 'network_client') or not ue_site.network_client:
+                ue.LogWarning("[网络] 网络客户端未初始化或导入失败，尝试手动初始化")
+                ue_site.initialize_network_client()
+                
+                # 给一些时间让连接建立
+                import time
+                time.sleep(0.2)
+                
+                # 再次检查是否初始化成功
+                if not hasattr(ue_site, 'network_client') or not ue_site.network_client:
+                    ue.LogWarning("[网络] 网络客户端无法初始化，跳过自动登录")
+                    return
+            
+            # 检查是否已经初始化完成
+            if not ue_site.is_network_initialized:
+                ue.LogWarning("[网络] 网络客户端正在初始化中，暂不执行自动登录")
+                
+                # 设置一个延迟执行的登录尝试
+                import threading
+                threading.Timer(2.0, self._delayed_login_attempt).start()
+                return
+            
+            # 检查是否已登录
+            if not ue_site.is_authenticated():
+                ue.LogWarning("[网络] 玩家未登录，启动时自动尝试登录")
+                # 使用默认用户名密码登录
+                username = "netease1"
+                password = "123"
+                success = self._login(username, password)
+                ue.LogWarning(f"[登录] 游戏启动自动登录 - 用户名: {username}, 请求发送状态: {'成功' if success else '失败'}")
+            else:
+                # 如果已登录，加载用户数据
+                ue.LogWarning("[网络] 玩家已登录，加载用户数据")
+                self._load_user_data()
+                
+        except ImportError as e:
+            ue.LogError(f"[网络] 导入ue_site模块失败，无法初始化玩家数据: {str(e)}")
+        except Exception as e:
+            ue.LogError(f"[网络] 初始化玩家数据时出错: {str(e)}")
+    
+    def _delayed_login_attempt(self):
+        """延迟执行的登录尝试，用于网络客户端初始化后执行"""
+        try:
+            import ue_site
+            
+            if not ue_site.is_network_initialized:
+                ue.LogWarning("[网络] 延迟登录尝试失败，网络客户端仍未初始化")
+                return
+                
+            ue.LogWarning("[网络] 执行延迟登录尝试")
+            username = "netease1"
+            password = "123"
+            success = self._login(username, password)
+            ue.LogWarning(f"[登录] 延迟自动登录 - 用户名: {username}, 请求发送状态: {'成功' if success else '失败'}")
+        except Exception as e:
+            ue.LogError(f"[网络] 延迟登录尝试时出错: {str(e)}")
+    
+    @ue.ufunction(BlueprintCallable=True, Category="Network")
+    def _trigger_login(self):
+        """通过按键触发的登录函数"""
+        try:
+            # 导入网络模块并检查状态
+            import ue_site
+            
+            # 确保网络已初始化
+            if not hasattr(ue_site, 'is_network_initialized') or not ue_site.is_network_initialized:
+                ue.LogWarning("[网络] 网络客户端未初始化，尝试初始化")
+                # 尝试初始化网络
+                ue_site.initialize_network_client()
+                
+                # 给一些时间让初始化完成
+                import time
+                time.sleep(0.2)
+                
+                # 再次检查
+                if not hasattr(ue_site, 'is_network_initialized') or not ue_site.is_network_initialized:
+                    ue.LogError("[网络] 网络客户端未初始化，无法登录")
+                    return False
+            
+            # 使用默认账号密码登录
+            username = "netease1"
+            password = "123"
+            ue.LogWarning(f"[登录] 按键触发登录 - 用户名: {username}")
+            
+            return self._login(username, password)
+        except ImportError:
+            ue.LogError("[网络] 导入ue_site模块失败，无法登录")
+            return False
+        except Exception as e:
+            ue.LogError(f"触发登录时出错: {str(e)}")
+            return False
+    
+    @ue.ufunction(BlueprintCallable=True, Category="Network", params=(str,str))
+    def _login(self, username, password):
+        """登录到游戏服务器"""
+        try:
+            import ue_site
+            
+            # 确保网络客户端已初始化
+            if not hasattr(ue_site, 'is_network_initialized') or not ue_site.is_network_initialized:
+                ue.LogError("[网络] 网络客户端未初始化，无法登录")
+                return False
+                
+            # 确保网络客户端实例存在
+            if not hasattr(ue_site, 'network_client') or not ue_site.network_client:
+                ue.LogError("[网络] 网络客户端对象不存在，无法登录")
+                return False
+            
+            # 确保网络已连接
+            if not ue_site.network_client.connected:
+                ue.LogWarning("[网络] 未连接到服务器，尝试重新连接")
+                
+                # 尝试重新连接
+                if not ue_site.try_connect_server(set_initialized=True):
+                    ue.LogError("[网络] 连接服务器失败，无法登录")
+                    return False
+            
+            # 尝试登录
+            success = ue_site.login(username, password)
+            if success:
+                ue.LogWarning(f"[登录] 正在尝试以用户名 {username} 登录...")
+            else:
+                ue.LogError("[登录] 登录请求发送失败")
+                
+            return success
+        except ImportError:
+            ue.LogError("[网络] 导入ue_site模块失败，无法登录")
+            return False
+        except Exception as e:
+            ue.LogError(f"[登录] 登录时出错: {str(e)}")
+            return False
+    
+    @ue.ufunction(BlueprintCallable=True, Category="Network")
+    def _logout(self):
+        """从游戏服务器登出"""
+        try:
+            import ue_site
+            
+            success = ue_site.logout()
+            if success:
+                ue.LogWarning("正在尝试登出...")
+            else:
+                ue.LogError("登出请求发送失败")
+                
+            return success
+        except Exception as e:
+            ue.LogError(f"登出时出错: {str(e)}")
+            return False
+    
+    @ue.ufunction(BlueprintCallable=True, Category="Network")
+    def _save_user_data(self):
+        """保存用户数据到服务器"""
+        try:
+            import ue_site
+            
+            # 创建要保存的数据
+            user_data = {
+                "player_name": "玩家角色",
+                "level": 10,
+                "health": 100,
+                "ammunition": self.MyAllBulletNumber,
+                "weapon_ammo": self.MyWeaopnBulletNumber,
+                "position": {
+                    "x": self.GetActorLocation().X,
+                    "y": self.GetActorLocation().Y,
+                    "z": self.GetActorLocation().Z
+                },
+                "timestamp": time.time()
+            }
+            
+            success = ue_site.save_user_data(user_data)
+            if success:
+                ue.LogWarning("正在保存用户数据...")
+            else:
+                ue.LogError("保存用户数据请求发送失败")
+                
+            return success
+        except Exception as e:
+            ue.LogError(f"保存用户数据时出错: {str(e)}")
+            return False
+    
+    @ue.ufunction(BlueprintCallable=True, Category="Network")
+    def _load_user_data(self):
+        """从服务器加载用户数据"""
+        try:
+            import ue_site
+            
+            success = ue_site.load_user_data()
+            if success:
+                ue.LogWarning("正在加载用户数据...")
+            else:
+                ue.LogError("加载用户数据请求发送失败")
+                
+            return success
+        except Exception as e:
+            ue.LogError(f"加载用户数据时出错: {str(e)}")
+            return False
+    
+    @ue.ufunction(BlueprintCallable=True, Category="Network")
+    def _update_from_server_data(self):
+        """从服务器数据更新角色属性"""
+        try:
+            import ue_site
+            
+            # 获取当前用户数据
+            user_data = ue_site.get_user_data()
+            if not user_data:
+                ue.LogWarning("没有可用的用户数据")
+                return False
+                
+            # 更新角色属性
+            if "ammunition" in user_data:
+                self.MyAllBulletNumber = user_data["ammunition"]
+                
+            if "weapon_ammo" in user_data:
+                self.MyWeaopnBulletNumber = user_data["weapon_ammo"]
+                
+            ue.LogWarning(f"从服务器更新角色数据: 子弹={self.MyAllBulletNumber}, 弹匣={self.MyWeaopnBulletNumber}")
+            return True
+            
+        except Exception as e:
+            ue.LogError(f"更新角色属性时出错: {str(e)}")
+            return False
+    
     def setup_enhanced_input(self, controller):
         ue.LogWarning(f"Hello setup_enhanced_input, {self}!")
         """设置Enhanced Input系统"""
@@ -292,9 +548,9 @@ class MyCharacter(ue.Character):
             self.weapon.fire()
     
     # 奔跑功能
-    def _run_start(self, value=None):
+    def _run_start(self):
         """开始奔跑时设置较高的移动速度"""
-        ue.LogWarning(f"_run_start 被调用! 参数值: {value}")
+        ue.LogWarning(f"_run_start 被调用!")
         if hasattr(self, 'CharacterMovement'):
             old_speed = self.CharacterMovement.MaxWalkSpeed
             self.CharacterMovement.MaxWalkSpeed = 1200.0
@@ -302,9 +558,9 @@ class MyCharacter(ue.Character):
         else:
             ue.LogError("无法找到CharacterMovement组件")
     
-    def _run_stop(self, value=None):
+    def _run_stop(self):
         """停止奔跑时恢复正常移动速度"""
-        ue.LogWarning(f"_run_stop 被调用! 参数值: {value}")
+        ue.LogWarning(f"_run_stop 被调用!")
         if hasattr(self, 'CharacterMovement'):
             old_speed = self.CharacterMovement.MaxWalkSpeed
             self.CharacterMovement.MaxWalkSpeed = 600.0
@@ -312,9 +568,10 @@ class MyCharacter(ue.Character):
         else:
             ue.LogError("无法找到CharacterMovement组件")
     
-    def _reload_weapon(self, value=None):
+    @ue.ufunction(BlueprintCallable=True, Category="Ammunition")
+    def _reload_weapon(self):
         """换弹功能 - 按R键触发"""
-        ue.LogWarning(f"_reload_weapon 被调用! 参数值: {value}")
+        ue.LogWarning(f"_reload_weapon 被调用! ")
         
         # 检查是否有武器
         if not hasattr(self, 'weapon') or self.weapon is None:
