@@ -2,81 +2,6 @@
 import ue
 @ue.uclass()
 class MyCharacter(ue.Character):
-    MaxHP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
-    CurrentHP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
-    MaxMP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
-    CurrentMP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
-    MaxEXP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
-    CurrentEXP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
-    AllBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
-    WeaopnBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
-    KilledEnemies = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
-
-    @ue.ufunction(BlueprintCallable=True, Category="Ammunition")
-    def AddAmmunitionFromItem(self):
-        """
-        从物品中获取弹药的自定义事件
-        这是一个可在蓝图中实现的事件，可以被Python代码调用
-        在蓝图中会自动获取到一个整数参数
-        """
-        pass
-    
-    @ue.ufunction(params=(int,float))
-    def FuncA(self,IntParams,FloatParams):
-        pass
-
-    @ue.ufunction(BlueprintCallable=True, Category="Ammunition")
-    def AddAmmunition(self):
-        """
-        获得弹药函数，蓝图中会传入一个参数，但在Python定义中不显式声明
-        注意：调用时需要在蓝图中传递一个整数参数
-        
-        在蓝图中调用时，这个函数会接受一个整数参数，表示要添加的弹药数量。
-        函数返回更新后的总弹药数量。
-        """
-        # 通过上下文获取传入的弹药数量
-        # 在实际调用时，这个参数会被传递，尽管我们在这里没有声明它
-        import inspect
-        # 获取当前帧和调用帧
-        frame = inspect.currentframe()
-        
-        # 尝试从局部变量中获取传入的参数
-        try:
-            # 假设传入的第一个参数存储在某个位置
-            if len(frame.f_locals) > 1:
-                # 找到不是self的第一个参数
-                for key, value in frame.f_locals.items():
-                    if key != 'self':
-                        ammo_count = int(value)
-                        break
-            else:
-                ammo_count = 10  # 默认值
-                ue.LogWarning("无法检测到传入的弹药数量，使用默认值10")
-        except:
-            ammo_count = 10  # 默认值
-            ue.LogWarning("获取传入参数失败，使用默认值10")
-        finally:
-            if frame:
-                del frame  # 避免循环引用
-        
-        # 更新角色的弹药数量
-        old_ammo = self.AllBulletNumber
-        self.AllBulletNumber += ammo_count
-        
-        # 尝试调用可在蓝图中实现的事件，传递添加的弹药数量
-        try:
-            # 触发事件，让蓝图有机会响应弹药变化
-            if hasattr(self, 'AddAmmunitionFromItem'):
-                self.AddAmmunitionFromItem()
-                ue.LogWarning("成功触发AddAmmunitionFromItem事件")
-        except Exception as e:
-            ue.LogWarning(f"触发事件失败: {str(e)}")
-        
-        # 打印日志信息
-        ue.LogWarning(f"获得弹药: +{ammo_count}, 旧弹药数: {old_ammo}, 新弹药数: {self.AllBulletNumber}")
-        
-        return self.AllBulletNumber
-    
     @ue.ufunction(override=True)
     def ReceiveBeginPlay(self):
         ue.LogWarning('%s Character ReceiveBeginPlay!' % self)
@@ -164,6 +89,92 @@ class MyCharacter(ue.Character):
 
         # 设置鼠标灵敏度
         self.MouseSpeed = 45.0  # 添加鼠标灵敏度属性
+
+        # 配置委托
+        self.GetKilled.Add(self.AddKilledNumbers)
+
+    
+    # 玩家属性
+    MaxHP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    CurrentHP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    MaxMP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    CurrentMP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    MaxEXP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    CurrentEXP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    AllBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    WeaopnBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    KilledEnemies = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+
+    # 委托（自定义事件）
+    GetKilled = ue.udelegate(BlueprintCallable=True, params=((int, 'KilledNumber'),))
+    # self.GetKilled.Broadcast(10)
+
+    def AddKilledNumbers(self, killed_number):
+        """处理敌人击杀事件的回调函数"""
+        self.KilledEnemies += killed_number
+
+    @ue.ufunction(BlueprintCallable=True, Category="Ammunition")
+    def AddAmmunitionFromItem(self):
+        """
+        从物品中获取弹药的自定义事件
+        这是一个可在蓝图中实现的事件，可以被Python代码调用
+        在蓝图中会自动获取到一个整数参数
+        """
+        pass
+
+    @ue.ufunction(BlueprintCallable=True, Category="Ammunition")
+    def AddAmmunition(self):
+        """
+        获得弹药函数，蓝图中会传入一个参数，但在Python定义中不显式声明
+        注意：调用时需要在蓝图中传递一个整数参数
+        
+        在蓝图中调用时，这个函数会接受一个整数参数，表示要添加的弹药数量。
+        函数返回更新后的总弹药数量。
+        """
+        # 通过上下文获取传入的弹药数量
+        # 在实际调用时，这个参数会被传递，尽管我们在这里没有声明它
+        import inspect
+        # 获取当前帧和调用帧
+        frame = inspect.currentframe()
+        
+        # 尝试从局部变量中获取传入的参数
+        try:
+            # 假设传入的第一个参数存储在某个位置
+            if len(frame.f_locals) > 1:
+                # 找到不是self的第一个参数
+                for key, value in frame.f_locals.items():
+                    if key != 'self':
+                        ammo_count = int(value)
+                        break
+            else:
+                ammo_count = 10  # 默认值
+                ue.LogWarning("无法检测到传入的弹药数量，使用默认值10")
+        except:
+            ammo_count = 10  # 默认值
+            ue.LogWarning("获取传入参数失败，使用默认值10")
+        finally:
+            if frame:
+                del frame  # 避免循环引用
+        
+        # 更新角色的弹药数量
+        old_ammo = self.AllBulletNumber
+        self.AllBulletNumber += ammo_count
+        
+        # 尝试调用可在蓝图中实现的事件，传递添加的弹药数量
+        try:
+            # 触发事件，让蓝图有机会响应弹药变化
+            if hasattr(self, 'AddAmmunitionFromItem'):
+                self.AddAmmunitionFromItem()
+                ue.LogWarning("成功触发AddAmmunitionFromItem事件")
+        except Exception as e:
+            ue.LogWarning(f"触发事件失败: {str(e)}")
+        
+        # 打印日志信息
+        ue.LogWarning(f"获得弹药: +{ammo_count}, 旧弹药数: {old_ammo}, 新弹药数: {self.AllBulletNumber}")
+        
+        return self.AllBulletNumber
+    
+    
 
     def _check_network_ready(self):
         """
