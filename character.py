@@ -120,13 +120,13 @@ class MyCharacter(ue.Character):
         self.InputComponent.BindKey("L", ue.EInputEvent.IE_Pressed, self._trigger_login)
         ue.LogWarning("在ReceiveBeginPlay中直接绑定L键登录成功")
         
-        # 添加F5键保存数据的绑定
-        self.InputComponent.BindKey("F5", ue.EInputEvent.IE_Pressed, self._save_game_data)
-        ue.LogWarning("在ReceiveBeginPlay中直接绑定F5键保存数据成功")
+        # 添加U键保存数据的绑定
+        self.InputComponent.BindKey("U", ue.EInputEvent.IE_Pressed, self._save_game_data)
+        ue.LogWarning("在ReceiveBeginPlay中直接绑定U键保存数据成功")
         
-        # 添加F8键加载数据的绑定
-        self.InputComponent.BindKey("F8", ue.EInputEvent.IE_Pressed, self._load_game_data)
-        ue.LogWarning("在ReceiveBeginPlay中直接绑定F8键加载数据成功")
+        # 添加I键加载数据的绑定
+        self.InputComponent.BindKey("I", ue.EInputEvent.IE_Pressed, self._load_game_data)
+        ue.LogWarning("在ReceiveBeginPlay中直接绑定I键加载数据成功")
 
         # 枪械
         self.InputComponent.BindAction('Fire', ue.EInputEvent.IE_Pressed, self._fire)
@@ -608,7 +608,7 @@ class MyCharacter(ue.Character):
     
     @ue.ufunction(BlueprintCallable=True, Category="Network")
     def _save_game_data(self):
-        """F5按键触发的保存游戏数据功能"""
+        """U按键触发的保存游戏数据功能"""
         try:
             import ue_site
             import time
@@ -620,7 +620,7 @@ class MyCharacter(ue.Character):
                 ue.LogWarning("[保存] 用户未登录，无法保存游戏数据。请先按L键登录")
                 return False
             
-            ue.LogWarning("====== F5按键触发保存游戏数据 ======")
+            ue.LogWarning("====== U按键触发保存游戏数据 ======")
             
             # 创建当前游戏状态的数据对象
             game_data = {

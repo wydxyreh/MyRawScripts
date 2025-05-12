@@ -37,5 +37,5 @@ C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\Network\sam
 C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\Network\sample_client.py
 C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\character.py
 C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\ue_site.py
-通过按键实现登录后的save和load，进入游戏、登录成功后，可以按下F5和F8分别进行save和load操作，并打印出相关信息，包括操作的执行情况和结果，以及操作的数据对象的具体值，比如save操作后，可以打印出保存的数据对象的具体值；
+通过按键实现登录后的save和load，进入游戏、登录成功后，可以按下U和I分别进行save和load操作，并打印出相关信息，包括操作的执行情况和结果，以及操作的数据对象的具体值，比如save操作后，可以打印出保存的数据对象的具体值；
 保存的数据为MyCharacter中的变量值，比如AllBulletNumber、WeaopnBulletNumber。
