@@ -31,3 +31,11 @@ C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\ue_site.py
 
 我期望的是，客户端配置和启动、客户端连接到服务端，客户端登录到服务端，这是三个不同的步骤，配置和启动在on_post_engine_init中完成，客户端连接到服务端，在游戏启动时完成，客户端登录到服务端则是按键触发，从客户端的运行日志可以看出，游戏开始时，客户端尝试连接到服务端，但是居然提示“[网络] 网络客户端尚未初始化完成，稍后可通过按L键手动登录”，而是在按下L之后，客户端才开始连接然后同时登录，我要求客户端与服务端的连接放在游戏开始时，按下L仅进行登录，如果连接此时已断开，才会重新进行与服务端的连接；
 可以考虑将客户端进行登录操作时，将接下来的行为阻塞，然后等到服务端返回的结果，当结果返回时，客户端再继续往后，并且客户端登录的结果也可以在相关函数中通ue.log展示出来。
+
+
+C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\Network\sample_server.py
+C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\Network\sample_client.py
+C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\character.py
+C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\ue_site.py
+通过按键实现登录后的save和load，进入游戏、登录成功后，可以按下F5和F8分别进行save和load操作，并打印出相关信息，包括操作的执行情况和结果，以及操作的数据对象的具体值，比如save操作后，可以打印出保存的数据对象的具体值；
+保存的数据为MyCharacter中的变量值，比如MyAllBulletNumber、MyWeaopnBulletNumber。

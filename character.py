@@ -113,6 +113,14 @@ class MyCharacter(ue.Character):
         # 添加L键触发登录的绑定
         self.InputComponent.BindKey("L", ue.EInputEvent.IE_Pressed, self._trigger_login)
         ue.LogWarning("在ReceiveBeginPlay中直接绑定L键登录成功")
+        
+        # 添加F5键保存数据的绑定
+        self.InputComponent.BindKey("F5", ue.EInputEvent.IE_Pressed, self._save_game_data)
+        ue.LogWarning("在ReceiveBeginPlay中直接绑定F5键保存数据成功")
+        
+        # 添加F8键加载数据的绑定
+        self.InputComponent.BindKey("F8", ue.EInputEvent.IE_Pressed, self._load_game_data)
+        ue.LogWarning("在ReceiveBeginPlay中直接绑定F8键加载数据成功")
 
         # 枪械
         self.InputComponent.BindAction('Fire', ue.EInputEvent.IE_Pressed, self._fire)
@@ -350,6 +358,7 @@ class MyCharacter(ue.Character):
         """保存用户数据到服务器"""
         try:
             import ue_site
+            import time
             
             # 创建要保存的数据
             user_data = {
@@ -366,9 +375,12 @@ class MyCharacter(ue.Character):
                 "timestamp": time.time()
             }
             
+            # 记录保存前的数据快照
+            self.last_saved_data = user_data.copy()
+            
             success = ue_site.save_user_data(user_data)
             if success:
-                ue.LogWarning("正在保存用户数据...")
+                ue.LogWarning(f"正在保存用户数据: {user_data}")
             else:
                 ue.LogError("保存用户数据请求发送失败")
                 
@@ -405,6 +417,10 @@ class MyCharacter(ue.Character):
             if not user_data:
                 ue.LogWarning("没有可用的用户数据")
                 return False
+            
+            # 保存加载前的数据快照，用于对比显示
+            old_ammo = self.MyAllBulletNumber
+            old_weapon_ammo = self.MyWeaopnBulletNumber
                 
             # 更新角色属性
             if "ammunition" in user_data:
@@ -413,11 +429,131 @@ class MyCharacter(ue.Character):
             if "weapon_ammo" in user_data:
                 self.MyWeaopnBulletNumber = user_data["weapon_ammo"]
                 
-            ue.LogWarning(f"从服务器更新角色数据: 子弹={self.MyAllBulletNumber}, 弹匣={self.MyWeaopnBulletNumber}")
+            ue.LogWarning(f"从服务器更新角色数据: 子弹从 {old_ammo} 更新为 {self.MyAllBulletNumber}, "
+                         f"弹匣从 {old_weapon_ammo} 更新为 {self.MyWeaopnBulletNumber}")
+            
+            # 打印完整的加载数据
+            ue.LogWarning(f"加载的完整数据: {user_data}")
             return True
             
         except Exception as e:
             ue.LogError(f"更新角色属性时出错: {str(e)}")
+            return False
+    
+    @ue.ufunction(BlueprintCallable=True, Category="Network")
+    def _save_game_data(self):
+        """F5按键触发的保存游戏数据功能"""
+        try:
+            import ue_site
+            import time
+            
+            # 检查是否已登录
+            is_authenticated = ue_site.is_authenticated()
+            if not is_authenticated:
+                ue.LogWarning("[保存] 用户未登录，无法保存游戏数据。请先按L键登录")
+                return False
+            
+            ue.LogWarning("====== F5按键触发保存游戏数据 ======")
+            
+            # 创建当前游戏状态的数据对象
+            game_data = {
+                "player_name": "玩家角色",
+                "level": 10,
+                "health": 100,
+                "ammunition": self.MyAllBulletNumber,
+                "weapon_ammo": self.MyWeaopnBulletNumber,
+                "position": {
+                    "x": self.GetActorLocation().X,
+                    "y": self.GetActorLocation().Y,
+                    "z": self.GetActorLocation().Z
+                },
+                "save_time": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "timestamp": time.time()
+            }
+            
+            # 打印保存前的数据状态
+            ue.LogWarning(f"[保存] 当前角色状态:")
+            ue.LogWarning(f"[保存] - 总弹药: {self.MyAllBulletNumber}")
+            ue.LogWarning(f"[保存] - 当前弹匣: {self.MyWeaopnBulletNumber}")
+            ue.LogWarning(f"[保存] - 位置: ({game_data['position']['x']:.2f}, {game_data['position']['y']:.2f}, {game_data['position']['z']:.2f})")
+            
+            # 保存数据
+            success = ue_site.save_user_data(game_data)
+            
+            if success:
+                ue.LogWarning("[保存] 游戏数据保存请求已发送")
+                ue.LogWarning(f"[保存] 完整保存数据: {game_data}")
+                ue.LogWarning("=================================")
+            else:
+                ue.LogError("[保存] 保存游戏数据请求发送失败")
+                
+            return success
+        except Exception as e:
+            ue.LogError(f"[保存] 触发保存游戏数据时出错: {str(e)}")
+            import traceback
+            ue.LogError(f"[保存] 错误详情: {traceback.format_exc()}")
+            return False
+    
+    @ue.ufunction(BlueprintCallable=True, Category="Network")
+    def _load_game_data(self):
+        """F8按键触发的加载游戏数据功能"""
+        try:
+            import ue_site
+            
+            # 检查是否已登录
+            is_authenticated = ue_site.is_authenticated()
+            if not is_authenticated:
+                ue.LogWarning("[加载] 用户未登录，无法加载游戏数据。请先按L键登录")
+                return False
+            
+            ue.LogWarning("====== F8按键触发加载游戏数据 ======")
+            
+            # 打印加载前的数据状态
+            ue.LogWarning(f"[加载] 当前角色状态:")
+            ue.LogWarning(f"[加载] - 总弹药: {self.MyAllBulletNumber}")
+            ue.LogWarning(f"[加载] - 当前弹匣: {self.MyWeaopnBulletNumber}")
+            
+            # 先从服务器加载最新数据
+            success = ue_site.load_user_data()
+            
+            if success:
+                # 设置一个短暂延迟，确保数据加载完成后再更新
+                import threading
+                
+                def delayed_update():
+                    # 0.5秒后尝试更新角色数据
+                    time.sleep(0.5)
+                    
+                    # 从加载的数据更新角色
+                    update_success = self._update_from_server_data()
+                    
+                    if update_success:
+                        ue.LogWarning("[加载] 已成功更新角色数据")
+                        
+                        # 获取当前用户数据
+                        user_data = ue_site.get_user_data()
+                        if user_data and "save_time" in user_data:
+                            ue.LogWarning(f"[加载] 加载的存档时间: {user_data.get('save_time', '未知')}")
+                            
+                    else:
+                        ue.LogError("[加载] 更新角色数据失败")
+                        
+                    ue.LogWarning("=================================")
+                
+                # 启动延迟更新线程
+                threading.Thread(target=delayed_update).start()
+                ue.LogWarning("[加载] 游戏数据加载请求已发送，正在处理...")
+                
+            else:
+                ue.LogError("[加载] 加载游戏数据请求发送失败")
+                ue.LogWarning("=================================")
+                
+            return success
+        except Exception as e:
+            ue.LogError(f"[加载] 触发加载游戏数据时出错: {str(e)}")
+            import traceback
+            ue.LogError(f"[加载] 错误详情: {traceback.format_exc()}")
+            ue.LogWarning("=================================")
             return False
     
     def setup_enhanced_input(self, controller):
