@@ -2,9 +2,15 @@
 import ue
 @ue.uclass()
 class MyCharacter(ue.Character):
-    # 添加弹药数属性
-    MyAllBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
-    MyWeaopnBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    MaxHP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    CurrentHP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    MaxMP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    CurrentMP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    MaxEXP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    CurrentEXP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    AllBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    WeaopnBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    KilledEnemies = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
 
     @ue.ufunction(BlueprintCallable=True, Category="Ammunition")
     def AddAmmunitionFromItem(self):
@@ -54,8 +60,8 @@ class MyCharacter(ue.Character):
                 del frame  # 避免循环引用
         
         # 更新角色的弹药数量
-        old_ammo = self.MyAllBulletNumber
-        self.MyAllBulletNumber += ammo_count
+        old_ammo = self.AllBulletNumber
+        self.AllBulletNumber += ammo_count
         
         # 尝试调用可在蓝图中实现的事件，传递添加的弹药数量
         try:
@@ -67,9 +73,9 @@ class MyCharacter(ue.Character):
             ue.LogWarning(f"触发事件失败: {str(e)}")
         
         # 打印日志信息
-        ue.LogWarning(f"获得弹药: +{ammo_count}, 旧弹药数: {old_ammo}, 新弹药数: {self.MyAllBulletNumber}")
+        ue.LogWarning(f"获得弹药: +{ammo_count}, 旧弹药数: {old_ammo}, 新弹药数: {self.AllBulletNumber}")
         
-        return self.MyAllBulletNumber
+        return self.AllBulletNumber
     
     @ue.ufunction(override=True)
     def ReceiveBeginPlay(self):
@@ -428,8 +434,15 @@ class MyCharacter(ue.Character):
                 "player_name": "玩家角色",
                 "level": 10,
                 "health": 100,
-                "ammunition": self.MyAllBulletNumber,
-                "weapon_ammo": self.MyWeaopnBulletNumber,
+                "MaxHP": self.MaxHP,
+                "CurrentHP": self.CurrentHP,
+                "MaxMP": self.MaxMP,
+                "CurrentMP": self.CurrentMP,
+                "MaxEXP": self.MaxEXP,
+                "CurrentEXP": self.CurrentEXP,
+                "AllBulletNumber": self.AllBulletNumber,
+                "WeaopnBulletNumber": self.WeaopnBulletNumber,
+                "KilledEnemies": self.KilledEnemies,
                 "position": {
                     "x": self.GetActorLocation().X,
                     "y": self.GetActorLocation().Y,
@@ -505,27 +518,82 @@ class MyCharacter(ue.Character):
                 return False
             
             # 保存加载前的数据快照，用于对比显示
-            old_ammo = self.MyAllBulletNumber
-            old_weapon_ammo = self.MyWeaopnBulletNumber
+            old_ammo = self.AllBulletNumber
+            old_weapon_ammo = self.WeaopnBulletNumber
             
             # 更新角色属性 - 添加类型检查和安全转换
-            if "ammunition" in user_data:
+            # 更新MaxHP
+            if "MaxHP" in user_data:
                 try:
-                    self.MyAllBulletNumber = int(user_data["ammunition"])
+                    self.MaxHP = int(user_data["MaxHP"])
                 except (TypeError, ValueError):
-                    ue.LogWarning(f"[更新] 无法将弹药值 '{user_data['ammunition']}' 转换为整数，使用原值")
+                    ue.LogWarning(f"[更新] 无法将MaxHP值 '{user_data['MaxHP']}' 转换为整数，使用原值")
+            
+            # 更新CurrentHP
+            if "CurrentHP" in user_data:
+                try:
+                    self.CurrentHP = int(user_data["CurrentHP"])
+                except (TypeError, ValueError):
+                    ue.LogWarning(f"[更新] 无法将CurrentHP值 '{user_data['CurrentHP']}' 转换为整数，使用原值")
+            
+            # 更新MaxMP
+            if "MaxMP" in user_data:
+                try:
+                    self.MaxMP = int(user_data["MaxMP"])
+                except (TypeError, ValueError):
+                    ue.LogWarning(f"[更新] 无法将MaxMP值 '{user_data['MaxMP']}' 转换为整数，使用原值")
+            
+            # 更新CurrentMP
+            if "CurrentMP" in user_data:
+                try:
+                    self.CurrentMP = int(user_data["CurrentMP"])
+                except (TypeError, ValueError):
+                    ue.LogWarning(f"[更新] 无法将CurrentMP值 '{user_data['CurrentMP']}' 转换为整数，使用原值")
+            
+            # 更新MaxEXP
+            if "MaxEXP" in user_data:
+                try:
+                    self.MaxEXP = int(user_data["MaxEXP"])
+                except (TypeError, ValueError):
+                    ue.LogWarning(f"[更新] 无法将MaxEXP值 '{user_data['MaxEXP']}' 转换为整数，使用原值")
+            
+            # 更新CurrentEXP
+            if "CurrentEXP" in user_data:
+                try:
+                    self.CurrentEXP = int(user_data["CurrentEXP"])
+                except (TypeError, ValueError):
+                    ue.LogWarning(f"[更新] 无法将CurrentEXP值 '{user_data['CurrentEXP']}' 转换为整数，使用原值")
+            
+            # 更新KilledEnemies
+            if "KilledEnemies" in user_data:
+                try:
+                    self.KilledEnemies = int(user_data["KilledEnemies"])
+                except (TypeError, ValueError):
+                    ue.LogWarning(f"[更新] 无法将KilledEnemies值 '{user_data['KilledEnemies']}' 转换为整数，使用原值")
+            
+            # 更新子弹数
+            if "AllBulletNumber" in user_data:
+                try:
+                    self.AllBulletNumber = int(user_data["AllBulletNumber"])
+                except (TypeError, ValueError):
+                    ue.LogWarning(f"[更新] 无法将弹药值 '{user_data['AllBulletNumber']}' 转换为整数，使用原值")
                 
-            if "weapon_ammo" in user_data:
+            if "WeaopnBulletNumber" in user_data:
                 try:
-                    self.MyWeaopnBulletNumber = int(user_data["weapon_ammo"])
+                    self.WeaopnBulletNumber = int(user_data["WeaopnBulletNumber"])
                 except (TypeError, ValueError):
-                    ue.LogWarning(f"[更新] 无法将弹匣值 '{user_data['weapon_ammo']}' 转换为整数，使用原值")
+                    ue.LogWarning(f"[更新] 无法将弹匣值 '{user_data['WeaopnBulletNumber']}' 转换为整数，使用原值")
             
             # 添加保存时间的检查和显示    
             save_time = user_data.get("save_time", "未知")
             
-            ue.LogWarning(f"[更新] 从服务器更新角色数据: 子弹从 {old_ammo} 更新为 {self.MyAllBulletNumber}, "
-                         f"弹匣从 {old_weapon_ammo} 更新为 {self.MyWeaopnBulletNumber}")
+            ue.LogWarning(f"[更新] 从服务器更新角色数据:")
+            ue.LogWarning(f"[更新] - 生命值: {self.CurrentHP}/{self.MaxHP}")
+            ue.LogWarning(f"[更新] - 魔法值: {self.CurrentMP}/{self.MaxMP}")
+            ue.LogWarning(f"[更新] - 经验值: {self.CurrentEXP}/{self.MaxEXP}")
+            ue.LogWarning(f"[更新] - 子弹从 {old_ammo} 更新为 {self.AllBulletNumber}")
+            ue.LogWarning(f"[更新] - 弹匣从 {old_weapon_ammo} 更新为 {self.WeaopnBulletNumber}")
+            ue.LogWarning(f"[更新] - 击杀敌人数: {self.KilledEnemies}")
             ue.LogWarning(f"[更新] 存档保存时间: {save_time}")
             
             # 打印完整的加载数据
@@ -559,8 +627,15 @@ class MyCharacter(ue.Character):
                 "player_name": "玩家角色",
                 "level": 10,
                 "health": 100,
-                "ammunition": self.MyAllBulletNumber,
-                "weapon_ammo": self.MyWeaopnBulletNumber,
+                "MaxHP": self.MaxHP,
+                "CurrentHP": self.CurrentHP,
+                "MaxMP": self.MaxMP,
+                "CurrentMP": self.CurrentMP,
+                "MaxEXP": self.MaxEXP,
+                "CurrentEXP": self.CurrentEXP,
+                "AllBulletNumber": self.AllBulletNumber,
+                "WeaopnBulletNumber": self.WeaopnBulletNumber,
+                "KilledEnemies": self.KilledEnemies,
                 "position": {
                     "x": self.GetActorLocation().X,
                     "y": self.GetActorLocation().Y,
@@ -572,8 +647,12 @@ class MyCharacter(ue.Character):
             
             # 打印保存前的数据状态
             ue.LogWarning(f"[保存] 当前角色状态:")
-            ue.LogWarning(f"[保存] - 总弹药: {self.MyAllBulletNumber}")
-            ue.LogWarning(f"[保存] - 当前弹匣: {self.MyWeaopnBulletNumber}")
+            ue.LogWarning(f"[保存] - 生命值: {self.CurrentHP}/{self.MaxHP}")
+            ue.LogWarning(f"[保存] - 魔法值: {self.CurrentMP}/{self.MaxMP}")
+            ue.LogWarning(f"[保存] - 经验值: {self.CurrentEXP}/{self.MaxEXP}")
+            ue.LogWarning(f"[保存] - 总弹药: {self.AllBulletNumber}")
+            ue.LogWarning(f"[保存] - 当前弹匣: {self.WeaopnBulletNumber}")
+            ue.LogWarning(f"[保存] - 击杀敌人数: {self.KilledEnemies}")
             ue.LogWarning(f"[保存] - 位置: ({game_data['position']['x']:.2f}, {game_data['position']['y']:.2f}, {game_data['position']['z']:.2f})")
             
             # 获取网络状态单例
@@ -671,8 +750,8 @@ class MyCharacter(ue.Character):
             
             # 打印加载前的数据状态
             ue.LogWarning(f"[加载] 当前角色状态:")
-            ue.LogWarning(f"[加载] - 总弹药: {self.MyAllBulletNumber}")
-            ue.LogWarning(f"[加载] - 当前弹匣: {self.MyWeaopnBulletNumber}")
+            ue.LogWarning(f"[加载] - 总弹药: {self.AllBulletNumber}")
+            ue.LogWarning(f"[加载] - 当前弹匣: {self.WeaopnBulletNumber}")
             
             # 获取网络状态单例
             network_status = ue_site.network_status
@@ -954,8 +1033,8 @@ class MyCharacter(ue.Character):
             return
         
         # 获取当前弹药数
-        current_weapon_ammo = self.MyWeaopnBulletNumber
-        current_total_ammo = self.MyAllBulletNumber
+        current_weapon_ammo = self.WeaopnBulletNumber
+        current_total_ammo = self.AllBulletNumber
         
         # 计算需要补充的弹药数量
         max_weapon_capacity = 20
@@ -994,11 +1073,11 @@ class MyCharacter(ue.Character):
         # 检查总弹药是否足够
         if current_total_ammo >= ammo_needed:
             # 总弹药充足，补充到最大容量
-            self.MyAllBulletNumber -= ammo_needed
-            self.MyWeaopnBulletNumber = max_weapon_capacity
-            ue.LogWarning(f"换弹完成：消耗{ammo_needed}发弹药，弹匣装填至{self.MyWeaopnBulletNumber}发，剩余总弹药{self.MyAllBulletNumber}发")
+            self.AllBulletNumber -= ammo_needed
+            self.WeaopnBulletNumber = max_weapon_capacity
+            ue.LogWarning(f"换弹完成：消耗{ammo_needed}发弹药，弹匣装填至{self.WeaopnBulletNumber}发，剩余总弹药{self.AllBulletNumber}发")
         else:
             # 总弹药不足，将所有剩余弹药装入武器
-            self.MyWeaopnBulletNumber += current_total_ammo
-            self.MyAllBulletNumber = 0
-            ue.LogWarning(f"弹药不足：将剩余{current_total_ammo}发弹药全部装入，当前弹匣{self.MyWeaopnBulletNumber}发，总弹药已耗尽")
+            self.WeaopnBulletNumber += current_total_ammo
+            self.AllBulletNumber = 0
+            ue.LogWarning(f"弹药不足：将剩余{current_total_ammo}发弹药全部装入，当前弹匣{self.WeaopnBulletNumber}发，总弹药已耗尽")
