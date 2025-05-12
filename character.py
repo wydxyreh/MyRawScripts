@@ -21,32 +21,38 @@ class MyCharacter(ue.Character):
         self.weapon = None
         
         # 创建战斗数据UI
-        widget_class = ue.LoadClass('/Game/ThirdPersonCPP/Blueprints/UI/BattleDataUI.BattleDataUI_C')
-        if widget_class:
-            # 正确使用GetPlayerController方法获取第一个玩家控制器
-            battle_ui = ue.WidgetBlueprintLibrary.Create(self.GetWorld(), widget_class, self.GetWorld().GetPlayerController(0))
-            # 添加到视口
+        try:
+            # 存储角色引用到模块级变量，使其可在整个模块中访问
+            import sys
+            current_module = sys.modules[__name__]
+            setattr(current_module, 'current_player_character', self)
+            
+            # 加载UI类
+            widget_class = ue.LoadClass('/Game/ThirdPersonCPP/Blueprints/UI/BattleDataUI.BattleDataUI_C')
+            if not widget_class:
+                ue.LogError('无法加载BattleDataUI类')
+                return
+                
+            # 创建并添加UI到视口
+            controller = self.GetWorld().GetPlayerController(0)
+            battle_ui = ue.WidgetBlueprintLibrary.Create(self.GetWorld(), widget_class, controller)
+            
             if battle_ui:
                 # 设置UI引用角色
                 if hasattr(battle_ui, 'MyCharacterBPUI'):
                     battle_ui.MyCharacterBPUI = self
-                    ue.LogWarning('成功设置UI对角色的引用')
-                else:
-                    ue.LogWarning('UI没有MyCharacterBPUI属性，尝试使用SetCharacterReference')
-                    # 尝试调用UI可能存在的设置角色引用的方法
-                    if hasattr(battle_ui, 'SetCharacterReference'):
-                        battle_ui.SetCharacterReference(self)
-                        ue.LogWarning('通过SetCharacterReference方法设置角色引用')
-                    
-                battle_ui.AddToViewport()
-                ue.LogWarning('成功创建并添加BattleDataUI到视口')
                 
-                # 保存UI引用以便后续使用
+                # 添加到视口并保存引用
+                battle_ui.AddToViewport()
                 self.battle_ui = battle_ui
+                ue.LogWarning('战斗数据UI创建成功')
             else:
                 ue.LogError('创建BattleDataUI失败')
-        else:
-            ue.LogError('加载BattleDataUI类失败')
+                
+        except Exception as e:
+            import traceback
+            ue.LogError(f'创建UI时出错: {str(e)}')
+            ue.LogError(traceback.format_exc())
         
         # 调用属性初始化函数
         self._init_player_attributes()
