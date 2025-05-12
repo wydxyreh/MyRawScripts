@@ -1,7 +1,14 @@
 # -*- encoding: utf-8 -*-
 import ue
-@ue.uclass()
+@ue.uclass(BlueprintType=True)
 class MyCharacter(ue.Character):
+    # 定义元类，帮助Unreal Engine在蓝图系统中正确识别此类
+    @classmethod
+    def _unreal_skeleton_class(cls):
+        # 这里指定我们的Python类要使用的真实蓝图类型
+        # 使用与动画蓝图尝试转换到的相同类型
+        return '/Game/ThirdPersonCPP/Blueprints/MyCharacterBP.MyCharacterBP_C'
+    
     @ue.ufunction(override=True)
     def ReceiveBeginPlay(self):
         ue.LogWarning('%s Character ReceiveBeginPlay!' % self)
@@ -12,6 +19,37 @@ class MyCharacter(ue.Character):
 
         # 确保weapon属性初始化为None
         self.weapon = None
+        
+        # 创建战斗数据UI
+        widget_class = ue.LoadClass('/Game/ThirdPersonCPP/Blueprints/UI/BattleDataUI.BattleDataUI_C')
+        if widget_class:
+            # 正确使用GetPlayerController方法获取第一个玩家控制器
+            battle_ui = ue.WidgetBlueprintLibrary.Create(self.GetWorld(), widget_class, self.GetWorld().GetPlayerController(0))
+            # 添加到视口
+            if battle_ui:
+                # 设置UI引用角色
+                if hasattr(battle_ui, 'MyCharacterBPUI'):
+                    battle_ui.MyCharacterBPUI = self
+                    ue.LogWarning('成功设置UI对角色的引用')
+                else:
+                    ue.LogWarning('UI没有MyCharacterBPUI属性，尝试使用SetCharacterReference')
+                    # 尝试调用UI可能存在的设置角色引用的方法
+                    if hasattr(battle_ui, 'SetCharacterReference'):
+                        battle_ui.SetCharacterReference(self)
+                        ue.LogWarning('通过SetCharacterReference方法设置角色引用')
+                    
+                battle_ui.AddToViewport()
+                ue.LogWarning('成功创建并添加BattleDataUI到视口')
+                
+                # 保存UI引用以便后续使用
+                self.battle_ui = battle_ui
+            else:
+                ue.LogError('创建BattleDataUI失败')
+        else:
+            ue.LogError('加载BattleDataUI类失败')
+        
+        # 调用属性初始化函数
+        self._init_player_attributes()
         
         controller = self.GetWorld().GetPlayerController()
         controller.UnPossess()
@@ -92,13 +130,14 @@ class MyCharacter(ue.Character):
 
         # 配置委托
         self.GetKilled.Add(self.AddKilledNumbers)
+        self.ItemAddAmmunition.Add(self.AddAmmunitionFromItem)
+        self.ItemAddHP.Add(self.AddHPFromItem)
+        self.TickAddAmmunition.Add(self.AddAmmunitionFromTick)
 
     
     # 玩家属性
     MaxHP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
     CurrentHP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
-    MaxMP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
-    CurrentMP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
     MaxEXP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
     CurrentEXP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
     AllBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
@@ -106,76 +145,56 @@ class MyCharacter(ue.Character):
     KilledEnemies = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
 
     # 委托（自定义事件）
+    # 击杀敌数
     GetKilled = ue.udelegate(BlueprintCallable=True, params=((int, 'KilledNumber'),))
     # self.GetKilled.Broadcast(10)
+    # 道具回复弹药
+    ItemAddAmmunition = ue.udelegate(BlueprintCallable=True, params=((int, 'AddAmmunitionNums'),))
+    # 道具回复生命值
+    ItemAddHP = ue.udelegate(BlueprintCallable=True, params=((int, 'AddHP'),))
+    # 每秒回复弹药
+    TickAddAmmunition = ue.udelegate(BlueprintCallable=True, params=())
 
     def AddKilledNumbers(self, killed_number):
         """处理敌人击杀事件的回调函数"""
         self.KilledEnemies += killed_number
+        ue.LogWarning(f"KilledEnemies:{self.KilledEnemies}")
 
-    @ue.ufunction(BlueprintCallable=True, Category="Ammunition")
-    def AddAmmunitionFromItem(self):
-        """
-        从物品中获取弹药的自定义事件
-        这是一个可在蓝图中实现的事件，可以被Python代码调用
-        在蓝图中会自动获取到一个整数参数
-        """
-        pass
-
-    @ue.ufunction(BlueprintCallable=True, Category="Ammunition")
-    def AddAmmunition(self):
-        """
-        获得弹药函数，蓝图中会传入一个参数，但在Python定义中不显式声明
-        注意：调用时需要在蓝图中传递一个整数参数
-        
-        在蓝图中调用时，这个函数会接受一个整数参数，表示要添加的弹药数量。
-        函数返回更新后的总弹药数量。
-        """
-        # 通过上下文获取传入的弹药数量
-        # 在实际调用时，这个参数会被传递，尽管我们在这里没有声明它
-        import inspect
-        # 获取当前帧和调用帧
-        frame = inspect.currentframe()
-        
-        # 尝试从局部变量中获取传入的参数
-        try:
-            # 假设传入的第一个参数存储在某个位置
-            if len(frame.f_locals) > 1:
-                # 找到不是self的第一个参数
-                for key, value in frame.f_locals.items():
-                    if key != 'self':
-                        ammo_count = int(value)
-                        break
-            else:
-                ammo_count = 10  # 默认值
-                ue.LogWarning("无法检测到传入的弹药数量，使用默认值10")
-        except:
-            ammo_count = 10  # 默认值
-            ue.LogWarning("获取传入参数失败，使用默认值10")
-        finally:
-            if frame:
-                del frame  # 避免循环引用
-        
-        # 更新角色的弹药数量
-        old_ammo = self.AllBulletNumber
-        self.AllBulletNumber += ammo_count
-        
-        # 尝试调用可在蓝图中实现的事件，传递添加的弹药数量
-        try:
-            # 触发事件，让蓝图有机会响应弹药变化
-            if hasattr(self, 'AddAmmunitionFromItem'):
-                self.AddAmmunitionFromItem()
-                ue.LogWarning("成功触发AddAmmunitionFromItem事件")
-        except Exception as e:
-            ue.LogWarning(f"触发事件失败: {str(e)}")
-        
-        # 打印日志信息
-        ue.LogWarning(f"获得弹药: +{ammo_count}, 旧弹药数: {old_ammo}, 新弹药数: {self.AllBulletNumber}")
-        
-        return self.AllBulletNumber
+    def AddAmmunitionFromItem(self, add_ammunition_nums):
+        """处理道具回复弹药事件的回调函数"""
+        self.AllBulletNumber += add_ammunition_nums
+        ue.LogWarning(f"AllBulletNumber:{self.AllBulletNumber}")
     
+    def AddAmmunitionFromTick(self):
+        """处理每秒自动回复弹药的回调函数"""
+        self.AllBulletNumber += 1
+        ue.LogWarning(f"[自动回复] 弹药+1，当前总弹药数:{self.AllBulletNumber}")
     
-
+    def AddHPFromItem(self, add_hp):
+        """
+        处理道具回复生命值事件的回调函数
+        实现蓝图中的道具回血逻辑：
+        1. 计算新的生命值 = 当前生命值 + 恢复血量
+        2. 如果新的生命值超过最大生命值，则将当前生命值设为最大生命值
+        3. 否则将当前生命值设为新的生命值
+        
+        参数:
+            add_hp (int): 道具恢复的血量值
+        """
+        # 计算新的生命值
+        new_hp = self.CurrentHP + add_hp
+        
+        # 检查是否超过最大生命值
+        if new_hp >= self.MaxHP:
+            # 如果超过最大生命值，则将当前生命值设为最大生命值
+            self.CurrentHP = self.MaxHP
+        else:
+            # 否则将当前生命值设为新的生命值
+            self.CurrentHP = new_hp
+        
+        # 记录日志
+        ue.LogWarning(f"道具回血效果: +{add_hp} HP，当前生命值: {self.CurrentHP}/{self.MaxHP}")
+    
     def _check_network_ready(self):
         """
         检查网络客户端是否已初始化并已连接到服务器
@@ -447,8 +466,6 @@ class MyCharacter(ue.Character):
                 "health": 100,
                 "MaxHP": self.MaxHP,
                 "CurrentHP": self.CurrentHP,
-                "MaxMP": self.MaxMP,
-                "CurrentMP": self.CurrentMP,
                 "MaxEXP": self.MaxEXP,
                 "CurrentEXP": self.CurrentEXP,
                 "AllBulletNumber": self.AllBulletNumber,
@@ -547,20 +564,6 @@ class MyCharacter(ue.Character):
                 except (TypeError, ValueError):
                     ue.LogWarning(f"[更新] 无法将CurrentHP值 '{user_data['CurrentHP']}' 转换为整数，使用原值")
             
-            # 更新MaxMP
-            if "MaxMP" in user_data:
-                try:
-                    self.MaxMP = int(user_data["MaxMP"])
-                except (TypeError, ValueError):
-                    ue.LogWarning(f"[更新] 无法将MaxMP值 '{user_data['MaxMP']}' 转换为整数，使用原值")
-            
-            # 更新CurrentMP
-            if "CurrentMP" in user_data:
-                try:
-                    self.CurrentMP = int(user_data["CurrentMP"])
-                except (TypeError, ValueError):
-                    ue.LogWarning(f"[更新] 无法将CurrentMP值 '{user_data['CurrentMP']}' 转换为整数，使用原值")
-            
             # 更新MaxEXP
             if "MaxEXP" in user_data:
                 try:
@@ -600,7 +603,6 @@ class MyCharacter(ue.Character):
             
             ue.LogWarning(f"[更新] 从服务器更新角色数据:")
             ue.LogWarning(f"[更新] - 生命值: {self.CurrentHP}/{self.MaxHP}")
-            ue.LogWarning(f"[更新] - 魔法值: {self.CurrentMP}/{self.MaxMP}")
             ue.LogWarning(f"[更新] - 经验值: {self.CurrentEXP}/{self.MaxEXP}")
             ue.LogWarning(f"[更新] - 子弹从 {old_ammo} 更新为 {self.AllBulletNumber}")
             ue.LogWarning(f"[更新] - 弹匣从 {old_weapon_ammo} 更新为 {self.WeaopnBulletNumber}")
@@ -640,8 +642,6 @@ class MyCharacter(ue.Character):
                 "health": 100,
                 "MaxHP": self.MaxHP,
                 "CurrentHP": self.CurrentHP,
-                "MaxMP": self.MaxMP,
-                "CurrentMP": self.CurrentMP,
                 "MaxEXP": self.MaxEXP,
                 "CurrentEXP": self.CurrentEXP,
                 "AllBulletNumber": self.AllBulletNumber,
@@ -659,7 +659,6 @@ class MyCharacter(ue.Character):
             # 打印保存前的数据状态
             ue.LogWarning(f"[保存] 当前角色状态:")
             ue.LogWarning(f"[保存] - 生命值: {self.CurrentHP}/{self.MaxHP}")
-            ue.LogWarning(f"[保存] - 魔法值: {self.CurrentMP}/{self.MaxMP}")
             ue.LogWarning(f"[保存] - 经验值: {self.CurrentEXP}/{self.MaxEXP}")
             ue.LogWarning(f"[保存] - 总弹药: {self.AllBulletNumber}")
             ue.LogWarning(f"[保存] - 当前弹匣: {self.WeaopnBulletNumber}")
@@ -745,7 +744,7 @@ class MyCharacter(ue.Character):
     
     @ue.ufunction(BlueprintCallable=True, Category="Network")
     def _load_game_data(self):
-        """F8按键触发的加载游戏数据功能"""
+        """I按键触发的加载游戏数据功能"""
         try:
             import ue_site
             import time
@@ -757,7 +756,7 @@ class MyCharacter(ue.Character):
                 ue.LogWarning("[加载] 用户未登录，无法加载游戏数据。请先按L键登录")
                 return False
             
-            ue.LogWarning("====== F8按键触发加载游戏数据 ======")
+            ue.LogWarning("====== I按键触发加载游戏数据 ======")
             
             # 打印加载前的数据状态
             ue.LogWarning(f"[加载] 当前角色状态:")
@@ -897,10 +896,36 @@ class MyCharacter(ue.Character):
             return
         
         ue.LogWarning("输入系统设置完成")
-    
-    @ue.ufunction
-    def MyNewFunction(self):
-        ue.LogWarning('%s Character MyNewFunction!' % self)
+        
+    @ue.ufunction(BlueprintCallable=True, Category="PlayerAttributes")
+    def _init_player_attributes(self):
+        """
+        初始化玩家角色的所有基础属性
+        设置生命值、魔法值、经验值、弹药数等属性的初始值
+        """
+        ue.LogWarning("初始化玩家属性...")
+        
+        # 生命值初始化
+        self.MaxHP = 100
+        self.CurrentHP = 50
+        
+        # 经验值初始化
+        self.MaxEXP = 100
+        self.CurrentEXP = 50
+        
+        # 弹药数初始化
+        self.AllBulletNumber = 100
+        self.WeaopnBulletNumber = 20
+        
+        # 击杀敌人数初始化
+        self.KilledEnemies = 0
+        
+        ue.LogWarning(f"玩家属性初始化完成:")
+        ue.LogWarning(f"- 生命值: {self.CurrentHP}/{self.MaxHP}")
+        ue.LogWarning(f"- 经验值: {self.CurrentEXP}/{self.MaxEXP}")
+        ue.LogWarning(f"- 总弹药: {self.AllBulletNumber}")
+        ue.LogWarning(f"- 当前弹匣: {self.WeaopnBulletNumber}")
+        ue.LogWarning(f"- 击杀敌人数: {self.KilledEnemies}")
 
     # 移动 - 以相机方向为中心
     def _move_forward(self, value):
