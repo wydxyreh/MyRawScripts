@@ -151,44 +151,65 @@ class MyCharacter(ue.Character):
         # 设置鼠标灵敏度
         self.MouseSpeed = 45.0  # 添加鼠标灵敏度属性
 
-    # 网络功能 - 玩家数据相关
-    def _initialize_player_data(self):
-        """初始化玩家数据 - 在游戏角色创建时尝试连接服务器"""
+    def _check_network_ready(self):
+        """
+        检查网络客户端是否已初始化并已连接到服务器
+        如果未初始化则尝试初始化，如果未连接则尝试连接
+        
+        返回: (bool, str) - (是否就绪, 错误信息)
+        """
         try:
-            # 导入网络模块
             import ue_site
             
-            # 使用单例对象直接检查网络状态
+            # 获取网络状态单例
             network_status = ue_site.network_status
-            ue.LogWarning(f"[网络] 单例状态: {network_status.get_status_dict()}")
             
-            # 如果网络尚未初始化，则尝试初始化
+            # 检查网络是否初始化
             if not network_status.is_network_initialized:
                 ue.LogWarning("[网络] 网络客户端尚未初始化，尝试初始化...")
                 ue_site.initialize_network_client()
                 
                 # 重新检查初始化状态
                 if not network_status.is_network_initialized:
-                    ue.LogWarning("[网络] 网络客户端初始化失败，稍后可通过按L键手动登录")
-                    return
+                    return False, "[网络] 网络客户端初始化失败"
                 else:
                     ue.LogWarning("[网络] 网络客户端已成功初始化")
-            else:
-                ue.LogWarning("[网络] 网络客户端已初始化")
-                
+            
             # 检查是否已连接
-            if network_status.is_connected:
-                ue.LogWarning("[网络] 已连接到服务器")
+            if not network_status.is_connected or not network_status.network_client or not network_status.network_client.connected:
+                ue.LogWarning("[网络] 网络客户端未连接，尝试连接到服务器...")
+                connected = ue_site.try_connect_server()
+                if not connected:
+                    return False, "[网络] 无法连接到服务器"
+                ue.LogWarning("[网络] 已成功连接到服务器")
+            
+            return True, ""
+        except ImportError:
+            return False, "[网络] 导入ue_site模块失败"
+        except Exception as e:
+            import traceback
+            error_msg = f"[网络] 检查网络就绪状态时出错: {str(e)}"
+            ue.LogError(f"{error_msg}\n{traceback.format_exc()}")
+            return False, error_msg
+    
+    # 网络功能 - 玩家数据相关
+    def _initialize_player_data(self):
+        """初始化玩家数据 - 在游戏角色创建时尝试连接服务器"""
+        try:
+            import ue_site
+            
+            # 使用单例对象直接检查网络状态
+            network_status = ue_site.network_status
+            ue.LogWarning(f"[网络] 单例状态: {network_status.get_status_dict()}")
+            
+            # 检查网络是否已初始化并连接
+            is_ready, error_msg = self._check_network_ready()
+            
+            if not is_ready:
+                ue.LogWarning(f"{error_msg}，稍后可通过按L键手动登录")
                 return
-                
-            # 尝试连接服务器
-            if network_status.network_client:
-                ue.LogWarning("[网络] 游戏启动时尝试连接到服务器...")
-                success = ue_site.try_connect_server()
-                if success:
-                    ue.LogWarning("[网络] 游戏启动连接服务器成功，可通过按L键登录")
-                else:
-                    ue.LogWarning("[网络] 游戏启动连接服务器失败，稍后可通过按L键重试")
+            
+            ue.LogWarning("[网络] 游戏启动连接服务器成功，可通过按L键登录")
             
         except ImportError as e:
             ue.LogError(f"[网络] 导入ue_site模块失败: {str(e)}")
@@ -201,7 +222,6 @@ class MyCharacter(ue.Character):
     def _trigger_login(self):
         """通过按键触发的登录函数"""
         try:
-            # 导入网络模块并使用单例状态
             import ue_site
             import time
             
@@ -224,25 +244,11 @@ class MyCharacter(ue.Character):
                     ue.LogWarning("[登录] 上一次登录请求已超时，将重新尝试")
                     # 继续执行登录逻辑
             
-            # 确保网络已初始化
-            if not network_status.is_network_initialized:
-                ue.LogWarning("[网络] 网络客户端未初始化，尝试初始化")
-                # 尝试初始化网络
-                ue_site.initialize_network_client()
-                
-                # 再次检查初始化状态
-                if not network_status.is_network_initialized:
-                    ue.LogError("[网络] 网络客户端未初始化，无法登录")
-                    return False
-            
-            # 检查网络连接状态，如果未连接则尝试连接
-            if not network_status.is_connected or not network_status.network_client or not network_status.network_client.connected:
-                ue.LogWarning("[网络] 网络客户端未连接，尝试连接到服务器...")
-                connected = ue_site.try_connect_server()
-                if not connected:
-                    ue.LogError("[网络] 无法连接到服务器，登录失败")
-                    return False
-                ue.LogWarning("[网络] 已成功连接到服务器")
+            # 检查网络是否已初始化并连接
+            is_ready, error_msg = self._check_network_ready()
+            if not is_ready:
+                ue.LogError(f"{error_msg}，无法登录")
+                return False
             
             # 使用默认账号密码登录
             username = "netease1"
@@ -283,24 +289,11 @@ class MyCharacter(ue.Character):
                     ue_site._process_messages_internal()
                     return False
             
-            # 确保网络客户端已初始化
-            if not network_status.is_network_initialized:
-                ue.LogError("[网络] 网络客户端未初始化，无法登录")
+            # 检查网络是否已初始化并连接
+            is_ready, error_msg = self._check_network_ready()
+            if not is_ready:
+                ue.LogError(f"{error_msg}，无法登录")
                 return False
-                
-            # 确保网络客户端实例存在
-            if not network_status.network_client:
-                ue.LogError("[网络] 网络客户端对象不存在，无法登录")
-                return False
-            
-            # 确保网络已连接
-            if not network_status.is_connected or not network_status.network_client.connected:
-                ue.LogWarning("[网络] 未连接到服务器，尝试重新连接")
-                
-                # 尝试重新连接
-                if not ue_site.try_connect_server():
-                    ue.LogError("[网络] 连接服务器失败，无法登录")
-                    return False
             
             # 尝试登录
             success = ue_site.login(username, password)
