@@ -9,6 +9,23 @@ class MyCharacter(ue.Character):
         # 使用与动画蓝图尝试转换到的相同类型
         return '/Game/ThirdPersonCPP/Blueprints/MyCharacterBP.MyCharacterBP_C'
     
+    # 添加EndPlay函数清理回调
+    @ue.ufunction(override=True)
+    def ReceiveEndPlay(self, EndPlayReason):
+        try:
+            # 获取动画实例
+            if self.Mesh:
+                anim_instance = self.Mesh.GetAnimInstance()
+                if anim_instance and hasattr(anim_instance, 'OnMontageBlendingOut'):
+                    # 移除所有注册的回调
+                    for delegate_name in ['_blend_out_delegate', '_default_blend_out_delegate']:
+                        if hasattr(self, delegate_name):
+                            anim_instance.OnMontageBlendingOut.Remove(getattr(self, delegate_name))
+                        
+            ue.LogWarning('角色退出游戏，已清理所有回调')
+        except Exception as e:
+            ue.LogError(f'清理角色回调时出错: {str(e)}')
+    
     @ue.ufunction(override=True)
     def ReceiveBeginPlay(self):
         ue.LogWarning('%s Character ReceiveBeginPlay!' % self)
@@ -16,11 +33,31 @@ class MyCharacter(ue.Character):
         # 导入protobuf
         import sys
         sys.path.append("C:\\Users\\wydx\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\site-packages")
-
-        # 确保weapon属性初始化为None
-        self.weapon = None
         
         # 创建战斗数据UI
+        self._create_battle_ui()
+        
+        # 初始化玩家属性和控制器
+        self._init_player_attributes()
+        
+        # 设置控制器
+        controller = self.GetWorld().GetPlayerController()
+        controller.UnPossess()
+        controller.Possess(self)
+        self.EnableInput(controller)
+
+        # 设置输入和摄像机
+        self._setup_input(controller)
+        self._configure_camera()
+        
+        # 初始化玩家网络数据
+        self._initialize_player_data()
+        
+        # 配置委托
+        self._setup_delegates()
+    
+    def _create_battle_ui(self):
+        """创建战斗数据UI"""
         try:
             # 存储角色引用到模块级变量，使其可在整个模块中访问
             import sys
@@ -53,94 +90,119 @@ class MyCharacter(ue.Character):
             import traceback
             ue.LogError(f'创建UI时出错: {str(e)}')
             ue.LogError(traceback.format_exc())
+    
+    def _setup_input(self, controller):
+        """设置输入绑定和Enhanced Input"""
+        ue.LogWarning(f"设置输入系统, {self}!")
         
-        # 调用属性初始化函数
-        self._init_player_attributes()
+        # 检查控制器的输入组件类型
+        if hasattr(controller, "EnhancedInputComponent"):
+            input_component = controller.EnhancedInputComponent
+            has_enhanced_input = True
+            ue.LogWarning("成功获取EnhancedInputComponent")
+        elif hasattr(controller, "InputComponent"):
+            input_component = controller.InputComponent
+            has_enhanced_input = hasattr(input_component, "BindActionByName")
+            ue.LogWarning("使用常规InputComponent")
+        else:
+            ue.LogError("无法获取任何InputComponent")
+            return
         
-        controller = self.GetWorld().GetPlayerController()
-        controller.UnPossess()
-        controller.Possess(self)
-        self.EnableInput(controller)
-
-        # 设置Enhanced Input组件
-        self.setup_enhanced_input(controller)
-
-        # 移动
+        # 保存InputComponent引用
+        self.InputComponent = input_component
+        
+        # 设置默认行走速度
+        self.CharacterMovement.MaxWalkSpeed = 600.0
+        ue.LogWarning(f"初始行走速度设置为: {self.CharacterMovement.MaxWalkSpeed}")
+        
+        # 基本移动和视角控制
         self.InputComponent.BindAxis('MoveForward', self._move_forward)
         self.InputComponent.BindAxis('MoveRight', self._move_right)
-
-        # 鼠标转向
         self.InputComponent.BindAxis('Turn', self._turn_right)
         self.InputComponent.BindAxis('LookUp', self._look_up)
-
-        # 跳跃
         self.InputComponent.BindAction('Jump', ue.EInputEvent.IE_Pressed, self._jump)
         
-        # 添加Shift键的绑定
-        self.InputComponent.BindKey("LeftShift", ue.EInputEvent.IE_Pressed, self._run_start)
-        self.InputComponent.BindKey("LeftShift", ue.EInputEvent.IE_Released, self._run_stop)
-        ue.LogWarning("在ReceiveBeginPlay中直接绑定LeftShift键成功")
+        # 功能键绑定
+        key_bindings = {
+            "LeftShift": [(ue.EInputEvent.IE_Pressed, self._run_start), 
+                        (ue.EInputEvent.IE_Released, self._run_stop)],
+            "R": [(ue.EInputEvent.IE_Pressed, self._reload_weapon)],
+            "L": [(ue.EInputEvent.IE_Pressed, self._trigger_login)],
+            "U": [(ue.EInputEvent.IE_Pressed, self._save_game_data)],
+            "I": [(ue.EInputEvent.IE_Pressed, self._load_game_data)],
+            "LeftMouseButton": [(ue.EInputEvent.IE_Pressed, self._attack_started)]
+        }
         
-        # 添加R键换弹的绑定
-        self.InputComponent.BindKey("R", ue.EInputEvent.IE_Pressed, self._reload_weapon)
-        ue.LogWarning("在ReceiveBeginPlay中直接绑定R键换弹成功")
-
-        # 添加L键触发登录的绑定
-        self.InputComponent.BindKey("L", ue.EInputEvent.IE_Pressed, self._trigger_login)
-        ue.LogWarning("在ReceiveBeginPlay中直接绑定L键登录成功")
+        # 注册所有键绑定
+        for key, bindings in key_bindings.items():
+            for event, callback in bindings:
+                self.InputComponent.BindKey(key, event, callback)
+            ue.LogWarning(f"绑定{key}键成功")
+            
+        # 如果支持Enhanced Input，尝试绑定额外的Enhanced Input动作
+        try:
+            if has_enhanced_input and hasattr(input_component, "BindActionByName"):
+                actions = {
+                    "MyRun": [(ue.EInputEvent.IE_Pressed, self._run_start), 
+                            (ue.EInputEvent.IE_Released, self._run_stop)],
+                    "MyReload": [(ue.EInputEvent.IE_Pressed, self._reload_weapon)]
+                }
+                
+                for action_name, bindings in actions.items():
+                    for event, callback in bindings:
+                        input_component.BindActionByName(action_name, event, callback)
+                
+                ue.LogWarning("使用Enhanced Input特有方法绑定成功")
+        except Exception as e:
+            ue.LogError(f"Enhanced Input绑定失败: {str(e)}")
         
-        # 添加U键保存数据的绑定
-        self.InputComponent.BindKey("U", ue.EInputEvent.IE_Pressed, self._save_game_data)
-        ue.LogWarning("在ReceiveBeginPlay中直接绑定U键保存数据成功")
-        
-        # 添加I键加载数据的绑定
-        self.InputComponent.BindKey("I", ue.EInputEvent.IE_Pressed, self._load_game_data)
-        ue.LogWarning("在ReceiveBeginPlay中直接绑定I键加载数据成功")
-
-        # 枪械
-        self.InputComponent.BindAction('Fire', ue.EInputEvent.IE_Pressed, self._fire)
-        
-        # 初始化玩家数据 - 尝试从服务器加载
-        self._initialize_player_data()
-        
-        # 配置角色移动和旋转 - 针对相机方向移动进行优化
+        # 设置角色移动和旋转
         self.CharacterMovement.bOrientRotationToMovement = True  # 角色朝向移动方向
         self.bUseControllerRotationYaw = False  # 禁用控制器Yaw旋转控制角色
-        self.CharacterMovement.RotationRate = ue.Rotator(0, 540, 0)  # 较高的旋转速度，让角色更快地转向移动方向
+        self.CharacterMovement.RotationRate = ue.Rotator(0, 540, 0)  # 较高的旋转速度
         
-        # 配置摄像机以角色Mesh为中心旋转
-        # 1. 获取SpringArm和Camera组件
-        spring_arm_class = ue.FindClass("SpringArmComponent")  # 使用FindClass获取类引用
-        camera_class = ue.FindClass("CameraComponent")  # 使用FindClass获取类引用
+        # 设置鼠标灵敏度
+        self.MouseSpeed = 45.0
         
-        spring_arm = self.GetComponentByClass(spring_arm_class)  # 获取SpringArm组件
-        camera = self.GetComponentByClass(camera_class)  # 获取Camera组件
+        ue.LogWarning("输入系统设置完成")
+    
+    def _configure_camera(self):
+        """配置摄像机以角色Mesh为中心旋转"""
+        # 获取SpringArm和Camera组件
+        spring_arm_class = ue.FindClass("SpringArmComponent")
+        camera_class = ue.FindClass("CameraComponent")
+        
+        spring_arm = self.GetComponentByClass(spring_arm_class)
+        camera = self.GetComponentByClass(camera_class)
         
         if spring_arm and self.Mesh:
-            # 2. 将SpringArm附着到角色Mesh而不是CapsuleComponent
-            spring_arm.DetachFromComponent(ue.EDetachmentRule.KeepWorld)  # 先分离
+            # 将SpringArm附着到角色Mesh而不是CapsuleComponent
+            spring_arm.DetachFromComponent(ue.EDetachmentRule.KeepWorld)
             spring_arm.AttachToComponent(self.Mesh, "", ue.EAttachmentRule.SnapToTarget, 
                                         ue.EAttachmentRule.SnapToTarget, ue.EAttachmentRule.SnapToTarget, True)
             
-            # 3. 配置SpringArm旋转设置
+            # 配置SpringArm旋转设置
             spring_arm.bUsePawnControlRotation = True  # 使用Pawn的控制器旋转
             spring_arm.bInheritPitch = True
             spring_arm.bInheritYaw = True
             spring_arm.bInheritRoll = False
             
-            # 4. 调整SpringArm相对位置和旋转
-            spring_arm.SetRelativeLocation(ue.Vector(0, 0, 88))  # 调整到合适的高度，与网格体原点位置相关
-
-        # 设置鼠标灵敏度
-        self.MouseSpeed = 45.0  # 添加鼠标灵敏度属性
-
-        # 配置委托
+            # 调整SpringArm相对位置和旋转
+            spring_arm.SetRelativeLocation(ue.Vector(0, 0, 88))
+    
+    def _setup_delegates(self):
+        """设置委托事件回调"""
         self.GetKilled.Add(self.AddKilledNumbers)
         self.ItemAddAmmunition.Add(self.AddAmmunitionFromItem)
         self.ItemAddHP.Add(self.AddHPFromItem)
         self.TickAddAmmunition.Add(self.AddAmmunitionFromTick)
 
-    
+    # 玩家状态
+    Died = ue.uproperty(bool, BlueprintReadWrite=True, Category="MyCharacter")
+    OnHit = ue.uproperty(bool, BlueprintReadWrite=True, Category="MyCharacter")
+    LockOrientation = ue.uproperty(bool, BlueprintReadWrite=True, Category="MyCharacter")
+    AttackState = ue.uproperty(bool, BlueprintReadWrite=True, Category="MyCharacter")
+
     # 玩家属性
     MaxHP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
     CurrentHP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
@@ -200,6 +262,282 @@ class MyCharacter(ue.Character):
         
         # 记录日志
         ue.LogWarning(f"道具回血效果: +{add_hp} HP，当前生命值: {self.CurrentHP}/{self.MaxHP}")
+        
+    @ue.ufunction(BlueprintCallable=True, Category="Combat")
+    def _attack_started(self):
+        """处理攻击开始事件，对应蓝图中的MyAttack输入动作的Started事件"""
+        # 检查是否已经在攻击中，避免重复触发
+        if self.AttackState:
+            ue.LogWarning("已经在攻击中，忽略新的攻击请求")
+            return
+            
+        # 设置攻击状态
+        self.AttackState = True
+        # 锁定朝向，使角色不会随移动转向
+        self.LockOrientation = True
+        
+        try:
+            # 获取玩家控制器
+            controller = self.GetWorld().GetPlayerController(0)
+            if not controller:
+                ue.LogError("无法获取玩家控制器")
+                return
+            
+            # 获取玩家视角方向
+            player_view_point = controller.GetPlayerViewPoint()
+            if not player_view_point or len(player_view_point) != 2:
+                ue.LogError("无法获取玩家视角")
+                return
+                
+            # 解包视角信息
+            camera_location = player_view_point[0]  # 相机位置
+            camera_rotation = player_view_point[1]  # 相机旋转
+                
+            # 首先尝试获取鼠标光标下的命中位置
+            hit_tuple = controller.GetHitResultUnderCursorByChannel(
+                ue.ETraceTypeQuery.TraceTypeQuery1,  # 默认通道
+                True  # 复杂碰撞检测
+            )
+            # 解包元组，获取命中状态和HitResult对象
+            has_hit = hit_tuple[0]  # 第一个元素是布尔值，表示是否命中
+            hit_result = hit_tuple[1]  # 第二个元素是HitResult对象
+            
+            # 获取角色当前位置
+            actor_location = self.GetActorLocation()
+            
+            # 确定目标位置（无论是否命中）
+            target_location = None
+            
+            if has_hit:
+                # 如果射线命中了物体，使用命中点
+                target_location = hit_result.Location
+                ue.LogWarning(f"射线命中目标点：{target_location}")
+            else:
+                # 如果射线未命中任何物体（例如鼠标指向天空），
+                # 计算一个远处的点作为目标方向
+                
+                # 获取鼠标位置
+                mouse_position = controller.GetMousePosition()
+                if mouse_position and len(mouse_position) >= 2:
+                    mouse_x = mouse_position[0]
+                    mouse_y = mouse_position[1]
+                    
+                    # 将鼠标屏幕坐标转换为世界空间方向
+                    world_direction = controller.DeprojectScreenPositionToWorld(mouse_x, mouse_y)
+                    if world_direction and len(world_direction) >= 2:
+                        direction = world_direction[1]  # 第二个元素是方向向量
+                        
+                        # 沿着方向向量延伸一段距离（例如10000单位）作为目标点
+                        # 使用向量计算：目标点 = 起点 + 方向 * 距离
+                        target_location = ue.KismetMathLibrary.VectorAdd(
+                            camera_location,
+                            ue.KismetMathLibrary.Multiply_VectorFloat(direction, 10000.0)
+                        )
+                        ue.LogWarning(f"使用计算的远点作为目标：{target_location}")
+                
+                # 如果无法通过鼠标获取方向，使用相机前方
+                if not target_location:
+                    # 获取相机前方向量
+                    forward_vector = ue.KismetMathLibrary.GetForwardVector(camera_rotation)
+                    
+                    # 计算相机前方远处的点
+                    target_location = ue.KismetMathLibrary.VectorAdd(
+                        camera_location,
+                        ue.KismetMathLibrary.Multiply_VectorFloat(forward_vector, 10000.0)
+                    )
+                    ue.LogWarning(f"使用相机前方作为目标方向：{target_location}")
+            
+            # 计算角色到目标点的方向向量
+            direction_vector = ue.KismetMathLibrary.Subtract_VectorVector(
+                target_location,
+                actor_location
+            )
+            
+            # 忽略高度差异，将Z坐标设为0
+            direction_vector.Z = 0
+            
+            # 归一化方向向量（确保是单位向量）
+            direction_vector = ue.KismetMathLibrary.Normal(direction_vector)
+            
+            # 从方向向量计算旋转
+            target_rotation = ue.KismetMathLibrary.MakeRotFromX(direction_vector)
+            
+            ue.LogWarning(f"计算方向向量: {direction_vector}, 目标旋转: {target_rotation}")
+            
+            # 设置角色朝向
+            self.SetActorRotation(target_rotation, False)
+            ue.LogWarning(f"设置角色旋转至：{target_rotation}")
+            
+            # 播放攻击动画蒙太奇
+            if self.Mesh:
+                montage = ue.LoadObject(ue.AnimMontage, "/Game/Mannequin/Animations/My_Fire_Rifle_Hip1_Montage.My_Fire_Rifle_Hip1_Montage")
+                if montage:
+                    # 获取动画实例
+                    anim_instance = self.Mesh.GetAnimInstance()
+                    if anim_instance and hasattr(anim_instance, 'Montage_Play'):
+                        # 播放蒙太奇并获取持续时间
+                        play_rate = 1.0
+                        montage_duration = anim_instance.Montage_Play(montage, play_rate)
+                        
+                        # 注册动画混出事件回调
+                        if hasattr(anim_instance, 'OnMontageBlendingOut'):
+                            # 先移除可能存在的旧回调以避免重复
+                            if hasattr(self, '_blend_out_delegate'):
+                                anim_instance.OnMontageBlendingOut.Remove(self._blend_out_delegate)
+                            
+                            # 创建新的回调函数
+                            def on_blend_out(montage, interrupted):
+                                ue.LogWarning("攻击动画混出，重置攻击状态")
+                                self._reset_attack_state()
+                            
+                            # 保存回调引用以便之后移除
+                            self._blend_out_delegate = on_blend_out
+                            
+                            # 注册混出回调
+                            anim_instance.OnMontageBlendingOut.Add(self._blend_out_delegate)
+                            ue.LogWarning("已注册攻击动画混出回调")
+                        else:
+                            # 如果没有混出回调，使用定时器
+                            animation_duration = 1.5  # 使用固定时长作为备选
+                            
+                            try:
+                                import threading
+                                timer = threading.Timer(animation_duration, self._reset_attack_state)
+                                timer.start()
+                                ue.LogWarning(f"使用替代定时器方法，将在{animation_duration}秒后重置状态")
+                            except Exception as timer_ex:
+                                ue.LogError(f"设置攻击动画定时器失败: {str(timer_ex)}")
+                                self._reset_attack_state()
+                    else:
+                        # 直接使用PlayAnimation方法
+                        self.Mesh.PlayAnimation(montage, False)
+                        
+                        # 使用固定的动画时长
+                        animation_duration = 1.5
+                        
+                        try:
+                            import threading
+                            timer = threading.Timer(animation_duration, self._reset_attack_state)
+                            timer.start()
+                            ue.LogWarning(f"使用固定动画时长: {animation_duration}秒")
+                        except Exception as timer_ex:
+                            ue.LogError(f"设置Python定时器出错: {str(timer_ex)}")
+                            self._reset_attack_state()
+                else:
+                    ue.LogError("无法加载攻击动画蒙太奇")
+                    self._reset_attack_state()
+            else:
+                ue.LogError("无法获取角色网格体组件")
+                self._reset_attack_state()
+                
+        except Exception as e:
+            import traceback
+            ue.LogError(f"执行攻击功能时出错: {str(e)}")
+            ue.LogError(traceback.format_exc())
+            self._reset_attack_state()
+    
+    def _play_attack_animation(self):
+        """播放攻击动画（该方法不再负责旋转角色，只负责动画播放）"""
+        try:
+            if not self.Mesh:
+                ue.LogError("无法获取角色网格体组件")
+                self._reset_attack_state()
+                return
+                
+            montage = ue.LoadObject(ue.AnimMontage, "/Game/Mannequin/Animations/My_Fire_Rifle_Hip1_Montage.My_Fire_Rifle_Hip1_Montage")
+            if not montage:
+                ue.LogError("无法加载攻击动画蒙太奇")
+                self._reset_attack_state()
+                return
+                
+            # 获取动画实例
+            anim_instance = self.Mesh.GetAnimInstance()
+            animation_duration = 1.5  # 默认动画时长
+            
+            # 尝试使用Montage_Play播放动画
+            if anim_instance and hasattr(anim_instance, 'Montage_Play'):
+                # 播放蒙太奇
+                anim_instance.Montage_Play(montage, 1.0)
+                
+                # 注册动画混出事件回调
+                if hasattr(anim_instance, 'OnMontageBlendingOut'):
+                    # 先移除可能存在的旧回调
+                    if hasattr(self, '_default_blend_out_delegate'):
+                        anim_instance.OnMontageBlendingOut.Remove(self._default_blend_out_delegate)
+                    
+                    # 创建并注册新回调
+                    def on_blend_out(montage, interrupted):
+                        ue.LogWarning("默认攻击动画混出，重置攻击状态")
+                        self._reset_attack_state()
+                    
+                    self._default_blend_out_delegate = on_blend_out
+                    anim_instance.OnMontageBlendingOut.Add(self._default_blend_out_delegate)
+                    ue.LogWarning("已注册默认攻击动画混出回调")
+                    return
+            
+            # 如果无法使用Montage_Play或没有混出回调，使用备选方案
+            if hasattr(self.Mesh, 'PlayAnimation'):
+                self.Mesh.PlayAnimation(montage, False)
+            
+            # 使用定时器作为备选
+            try:
+                import threading
+                timer = threading.Timer(animation_duration, self._reset_attack_state)
+                timer.start()
+                ue.LogWarning(f"使用定时器，将在{animation_duration}秒后重置状态")
+            except Exception as timer_ex:
+                ue.LogError(f"设置定时器失败: {str(timer_ex)}")
+                self._reset_attack_state()
+                
+        except Exception as e:
+            ue.LogError(f"播放攻击动画时出错: {str(e)}")
+            self._reset_attack_state()
+    
+    def _reset_attack_state(self):
+        """重置攻击相关状态并确保角色回到待机状态"""
+        try:
+            # 安全地重置攻击状态
+            self.AttackState = False
+            self.LockOrientation = False
+            
+            # 确保角色回到待机状态
+            # 获取角色的Mesh组件
+            if self.Mesh:
+                # 停止所有当前正在播放的蒙太奇
+                anim_instance = self.Mesh.GetAnimInstance()
+                if anim_instance:
+                    # 如果当前有蒙太奇在播放，停止它
+                    if hasattr(anim_instance, 'Montage_Stop'):
+                        anim_instance.Montage_Stop(0.25)  # 使用短暂的混合时间平滑过渡
+                    
+                    # 确保角色回到待机状态 - 这是关键部分
+                    # 通过直接设置角色动画蓝图中的状态机变量，使其回到默认的待机状态循环
+                    if hasattr(anim_instance, 'SetVariableByName'):
+                        # 重置所有可能影响待机状态的变量
+                        anim_instance.SetVariableByName('bIsFalling', False)
+                        anim_instance.SetVariableByName('bIsAttacking', False)
+                        anim_instance.SetVariableByName('bIsInAir', False)
+                        # 任何其他可能的状态变量都应重置
+            
+            ue.LogWarning("重置攻击状态")
+        except Exception as e:
+            # 捕获所有可能的异常，确保不会崩溃
+            ue.LogError(f"重置攻击状态时发生错误: {str(e)}")
+            
+            # 尝试最基本的重置以防止卡住
+            try:
+                self.AttackState = False
+                self.LockOrientation = False
+            except:
+                pass
+        
+    def _on_attack_animation_end(self):
+        """攻击动画结束时的回调函数"""
+        self._reset_attack_state()
+        
+    def _on_empty_ammo(self):
+        """弹药为空时的回调函数，对应蓝图中的自定义事件"""
+        self._reset_attack_state()
     
     def _check_network_ready(self):
         """
@@ -862,46 +1200,6 @@ class MyCharacter(ue.Character):
             ue.LogError(f"[加载] 错误详情: {traceback.format_exc()}")
             ue.LogWarning("=================================")
             return False
-    
-    def setup_enhanced_input(self, controller):
-        ue.LogWarning(f"Hello setup_enhanced_input, {self}!")
-        """设置Enhanced Input系统"""
-        
-        # 检查控制器是否有Enhanced Input组件
-        if hasattr(controller, "EnhancedInputComponent"):
-            enh_input = controller.EnhancedInputComponent
-            ue.LogWarning("成功获取EnhancedInputComponent")
-        elif hasattr(controller, "InputComponent"):
-            # 尝试确定是否是EnhancedInputComponent
-            enh_input = controller.InputComponent
-            if hasattr(enh_input, "BindAction"):
-                ue.LogWarning("使用常规InputComponent")
-            else:
-                ue.LogError("InputComponent不支持绑定动作")
-                return
-        else:
-            ue.LogError("无法获取任何InputComponent")
-            return
-                
-        # 设置默认行走和奔跑速度
-        self.CharacterMovement.MaxWalkSpeed = 600.0  # 默认行走速度
-        ue.LogWarning(f"初始行走速度设置为: {self.CharacterMovement.MaxWalkSpeed}")
-        
-        try:
-            # Enhanced Input 绑定
-            if hasattr(enh_input, "BindActionByName"):
-                # 添加跑步动作的增强型输入绑定
-                enh_input.BindActionByName("MyRun", ue.EInputEvent.IE_Pressed, self._run_start)
-                enh_input.BindActionByName("MyRun", ue.EInputEvent.IE_Released, self._run_stop)
-                ue.LogWarning("使用Enhanced Input特有方法绑定成功")
-                # 添加换弹动作的增强型输入绑定
-                enh_input.BindActionByName("MyReload", ue.EInputEvent.IE_Pressed, self._reload_weapon)
-                ue.LogWarning("使用Enhanced Input特有方法绑定成功")
-        except Exception as e:
-            ue.LogError(f"绑定动作失败: {str(e)}")
-            return
-        
-        ue.LogWarning("输入系统设置完成")
         
     @ue.ufunction(BlueprintCallable=True, Category="PlayerAttributes")
     def _init_player_attributes(self):
@@ -915,17 +1213,28 @@ class MyCharacter(ue.Character):
         self.MaxHP = 100
         self.CurrentHP = 50
         
+        # 攻击状态初始化
+        self.AttackState = False
+        
         # 经验值初始化
         self.MaxEXP = 100
         self.CurrentEXP = 50
         
         # 弹药数初始化
         self.AllBulletNumber = 100
-        self.WeaopnBulletNumber = 20
+        self.WeaopnBulletNumber = 10
         
         # 击杀敌人数初始化
         self.KilledEnemies = 0
         
+        # 角色状态初始
+        self.Died = False
+        self.OnHit = False
+        self.LockOrientation = False
+
+        # 确保weapon属性初始化为None
+        # self.weapon = None
+
         ue.LogWarning(f"玩家属性初始化完成:")
         ue.LogWarning(f"- 生命值: {self.CurrentHP}/{self.MaxHP}")
         ue.LogWarning(f"- 经验值: {self.CurrentEXP}/{self.MaxEXP}")
@@ -936,38 +1245,35 @@ class MyCharacter(ue.Character):
     # 移动 - 以相机方向为中心
     def _move_forward(self, value):
         if value != 0:
-            # 获取控制器的旋转（即相机的方向）
-            controller_rotation = self.Controller.GetControlRotation()
-            # 只使用Yaw旋转创建新的旋转器（保持水平平面移动）
-            yaw_rotation = ue.Rotator(0.0, controller_rotation.Yaw, 0.0)
-            # 从旋转器获取前进方向向量 - 使用正确的数学库函数
-            if hasattr(ue, "KismetMathLibrary"):
-                # 如果存在KismetMathLibrary
-                forward_direction = ue.KismetMathLibrary.GetForwardVector(yaw_rotation)
-            else:
-                # 备选方案：使用旋转直接获取前向向量
-                # 在一些版本的NePythonBinding中可能不需要通过KismetMathLibrary
-                forward_direction = yaw_rotation.GetForwardVector()
-            
-            # 应用移动输入
-            self.AddMovementInput(forward_direction, value)
+            self._apply_directional_movement(value, self._get_direction_vector("forward"))
 
     def _move_right(self, value):
         if value != 0:
-            # 获取控制器的旋转（即相机的方向）
-            controller_rotation = self.Controller.GetControlRotation()
-            # 只使用Yaw旋转创建新的旋转器（保持水平平面移动）
-            yaw_rotation = ue.Rotator(0.0, controller_rotation.Yaw, 0.0)
-            # 从旋转器获取右方向向量 - 使用正确的数学库函数
-            if hasattr(ue, "KismetMathLibrary"):
-                # 如果存在KismetMathLibrary
-                right_direction = ue.KismetMathLibrary.GetRightVector(yaw_rotation)
+            self._apply_directional_movement(value, self._get_direction_vector("right"))
+            
+    def _get_direction_vector(self, direction):
+        """获取指定方向的向量（基于控制器旋转）"""
+        # 获取控制器的旋转（相机方向）
+        controller_rotation = self.Controller.GetControlRotation()
+        # 只使用Yaw旋转创建新的旋转器（保持水平平面移动）
+        yaw_rotation = ue.Rotator(0.0, controller_rotation.Yaw, 0.0)
+        
+        # 获取方向向量
+        if hasattr(ue, "KismetMathLibrary"):
+            if direction == "forward":
+                return ue.KismetMathLibrary.GetForwardVector(yaw_rotation)
             else:
-                # 备选方案：使用旋转直接获取右向向量
-                right_direction = yaw_rotation.GetRightVector()
-                
-            # 应用移动输入
-            self.AddMovementInput(right_direction, value)
+                return ue.KismetMathLibrary.GetRightVector(yaw_rotation)
+        else:
+            # 备选方案：直接从旋转获取向量
+            if direction == "forward":
+                return yaw_rotation.GetForwardVector()
+            else:
+                return yaw_rotation.GetRightVector()
+    
+    def _apply_directional_movement(self, value, direction_vector):
+        """应用方向性移动"""
+        self.AddMovementInput(direction_vector, value)
     
     # 鼠标转向
     def _turn_right(self, value):
@@ -1046,21 +1352,18 @@ class MyCharacter(ue.Character):
     # 奔跑功能
     def _run_start(self):
         """开始奔跑时设置较高的移动速度"""
-        ue.LogWarning(f"_run_start 被调用!")
-        if hasattr(self, 'CharacterMovement'):
-            old_speed = self.CharacterMovement.MaxWalkSpeed
-            self.CharacterMovement.MaxWalkSpeed = 1200.0
-            ue.LogWarning(f"开始奔跑 - 速度从{old_speed}更改为1200")
-        else:
-            ue.LogError("无法找到CharacterMovement组件")
+        self._set_movement_speed(1200.0)
     
     def _run_stop(self):
         """停止奔跑时恢复正常移动速度"""
-        ue.LogWarning(f"_run_stop 被调用!")
+        self._set_movement_speed(600.0)
+        
+    def _set_movement_speed(self, speed):
+        """设置角色移动速度"""
         if hasattr(self, 'CharacterMovement'):
             old_speed = self.CharacterMovement.MaxWalkSpeed
-            self.CharacterMovement.MaxWalkSpeed = 600.0
-            ue.LogWarning(f"停止奔跑 - 速度从{old_speed}更改为600")
+            self.CharacterMovement.MaxWalkSpeed = speed
+            ue.LogWarning(f"移动速度从{old_speed}更改为{speed}")
         else:
             ue.LogError("无法找到CharacterMovement组件")
     
@@ -1091,7 +1394,6 @@ class MyCharacter(ue.Character):
             # 获取换弹动画蒙太奇
             reload_montage = ue.LoadObject(ue.AnimMontage.Class(), 
                 '/Game/Mannequin/Animations/My_Reload_Rifle_Hip1_Montage.My_Reload_Rifle_Hip1_Montage')
-            
             if reload_montage and hasattr(self, 'Mesh'):
                 # 使用PlayMontage，相当于蓝图中的PlayMontage节点
                 if hasattr(ue, 'AnimInstance'):
