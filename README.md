@@ -43,5 +43,7 @@ C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\ue_site.py
 结合 C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\Plugins\NePythonBinding\Tools\pystubs\ue\__init__.pyi 分析并修复上述问题
 
 C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\character.py
-对于换弹操作，按下R键开始换弹，然后播放对应的换弹动画蒙太奇，播放完换弹动画之后，才将弹药进行换弹。
-以及换弹过程中，不允许进行左键攻击
+对于换弹，在换弹过程中，播放换弹动画蒙太奇的时候，不允许进行攻击（可扩展）。
+同理，对于攻击，播放攻击动画蒙太奇的时候，不允许运行换弹操作（可扩展）；
+
+要求在按住shift加速跑的时候，不允许攻击，但是可以换弹
