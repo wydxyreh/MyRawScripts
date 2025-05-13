@@ -368,67 +368,8 @@ class MyCharacter(ue.Character):
             self.SetActorRotation(target_rotation, False)
             ue.LogWarning(f"设置角色旋转至：{target_rotation}")
             
-            # 播放攻击动画蒙太奇
-            if self.Mesh:
-                montage = ue.LoadObject(ue.AnimMontage, "/Game/Mannequin/Animations/My_Fire_Rifle_Hip1_Montage.My_Fire_Rifle_Hip1_Montage")
-                if montage:
-                    # 获取动画实例
-                    anim_instance = self.Mesh.GetAnimInstance()
-                    if anim_instance and hasattr(anim_instance, 'Montage_Play'):
-                        # 播放蒙太奇并获取持续时间
-                        play_rate = 1.0
-                        montage_duration = anim_instance.Montage_Play(montage, play_rate)
-                        
-                        # 注册动画混出事件回调
-                        if hasattr(anim_instance, 'OnMontageBlendingOut'):
-                            # 先移除可能存在的旧回调以避免重复
-                            if hasattr(self, '_blend_out_delegate'):
-                                anim_instance.OnMontageBlendingOut.Remove(self._blend_out_delegate)
-                            
-                            # 创建新的回调函数
-                            def on_blend_out(montage, interrupted):
-                                ue.LogWarning("攻击动画混出，重置攻击状态")
-                                self._reset_attack_state()
-                            
-                            # 保存回调引用以便之后移除
-                            self._blend_out_delegate = on_blend_out
-                            
-                            # 注册混出回调
-                            anim_instance.OnMontageBlendingOut.Add(self._blend_out_delegate)
-                            ue.LogWarning("已注册攻击动画混出回调")
-                        else:
-                            # 如果没有混出回调，使用定时器
-                            animation_duration = 1.5  # 使用固定时长作为备选
-                            
-                            try:
-                                import threading
-                                timer = threading.Timer(animation_duration, self._reset_attack_state)
-                                timer.start()
-                                ue.LogWarning(f"使用替代定时器方法，将在{animation_duration}秒后重置状态")
-                            except Exception as timer_ex:
-                                ue.LogError(f"设置攻击动画定时器失败: {str(timer_ex)}")
-                                self._reset_attack_state()
-                    else:
-                        # 直接使用PlayAnimation方法
-                        self.Mesh.PlayAnimation(montage, False)
-                        
-                        # 使用固定的动画时长
-                        animation_duration = 1.5
-                        
-                        try:
-                            import threading
-                            timer = threading.Timer(animation_duration, self._reset_attack_state)
-                            timer.start()
-                            ue.LogWarning(f"使用固定动画时长: {animation_duration}秒")
-                        except Exception as timer_ex:
-                            ue.LogError(f"设置Python定时器出错: {str(timer_ex)}")
-                            self._reset_attack_state()
-                else:
-                    ue.LogError("无法加载攻击动画蒙太奇")
-                    self._reset_attack_state()
-            else:
-                ue.LogError("无法获取角色网格体组件")
-                self._reset_attack_state()
+            # 调用攻击动画播放函数
+            self._play_attack_animation()
                 
         except Exception as e:
             import traceback
@@ -437,7 +378,7 @@ class MyCharacter(ue.Character):
             self._reset_attack_state()
     
     def _play_attack_animation(self):
-        """播放攻击动画（该方法不再负责旋转角色，只负责动画播放）"""
+        """播放攻击动画（该方法专门负责动画播放，由_attack_started调用）"""
         try:
             if not self.Mesh:
                 ue.LogError("无法获取角色网格体组件")
@@ -456,23 +397,27 @@ class MyCharacter(ue.Character):
             
             # 尝试使用Montage_Play播放动画
             if anim_instance and hasattr(anim_instance, 'Montage_Play'):
-                # 播放蒙太奇
-                anim_instance.Montage_Play(montage, 1.0)
+                # 播放蒙太奇并获取持续时间
+                play_rate = 1.0
+                montage_duration = anim_instance.Montage_Play(montage, play_rate)
                 
                 # 注册动画混出事件回调
                 if hasattr(anim_instance, 'OnMontageBlendingOut'):
-                    # 先移除可能存在的旧回调
-                    if hasattr(self, '_default_blend_out_delegate'):
-                        anim_instance.OnMontageBlendingOut.Remove(self._default_blend_out_delegate)
+                    # 先移除可能存在的旧回调以避免重复
+                    if hasattr(self, '_blend_out_delegate'):
+                        anim_instance.OnMontageBlendingOut.Remove(self._blend_out_delegate)
                     
-                    # 创建并注册新回调
+                    # 创建新的回调函数
                     def on_blend_out(montage, interrupted):
-                        ue.LogWarning("默认攻击动画混出，重置攻击状态")
+                        ue.LogWarning("攻击动画混出，重置攻击状态")
                         self._reset_attack_state()
                     
-                    self._default_blend_out_delegate = on_blend_out
-                    anim_instance.OnMontageBlendingOut.Add(self._default_blend_out_delegate)
-                    ue.LogWarning("已注册默认攻击动画混出回调")
+                    # 保存回调引用以便之后移除
+                    self._blend_out_delegate = on_blend_out
+                    
+                    # 注册混出回调
+                    anim_instance.OnMontageBlendingOut.Add(self._blend_out_delegate)
+                    ue.LogWarning("已注册攻击动画混出回调")
                     return
             
             # 如果无法使用Montage_Play或没有混出回调，使用备选方案
