@@ -196,6 +196,7 @@ class MyCharacter(ue.Character):
         self.ItemAddAmmunition.Add(self.AddAmmunitionFromItem)
         self.ItemAddHP.Add(self.AddHPFromItem)
         self.TickAddAmmunition.Add(self.AddAmmunitionFromTick)
+        self.FireBullet.Add(self.GenerateBullet)
 
     # 玩家状态
     Died = ue.uproperty(bool, BlueprintReadWrite=True, Category="MyCharacter")
@@ -222,6 +223,8 @@ class MyCharacter(ue.Character):
     ItemAddHP = ue.udelegate(BlueprintCallable=True, params=((int, 'AddHP'),))
     # 每秒回复弹药
     TickAddAmmunition = ue.udelegate(BlueprintCallable=True, params=())
+    # 发射子弹
+    FireBullet = ue.udelegate(BlueprintCallable=True, params=())
 
     def AddKilledNumbers(self, killed_number):
         """处理敌人击杀事件的回调函数"""
@@ -262,7 +265,126 @@ class MyCharacter(ue.Character):
         
         # 记录日志
         ue.LogWarning(f"道具回血效果: +{add_hp} HP，当前生命值: {self.CurrentHP}/{self.MaxHP}")
-        
+    
+    def GenerateBullet(self):
+        """处理子弹生成的回调函数"""
+        try:
+            # 检查弹药数量
+            if self.WeaopnBulletNumber <= 0:
+                ue.LogWarning("弹药不足，无法发射子弹")
+                return False
+            
+            # 减少弹药数量
+            self.WeaopnBulletNumber -= 1
+            ue.LogWarning(f"发射子弹，剩余弹药: {self.WeaopnBulletNumber}")
+            
+            # 获取玩家控制器和相机方向
+            controller = self.GetWorld().GetPlayerController(0)  # 修复：使用GetPlayerController(0)替代GetFirstPlayerController
+            if not controller:
+                ue.LogError("无法获取玩家控制器")
+                return False
+                
+            # 获取玩家视角方向
+            player_view_point = controller.GetPlayerViewPoint()
+            if not player_view_point or len(player_view_point) != 2:
+                ue.LogError("无法获取玩家视角")
+                return False
+                
+            # 解包视角信息
+            camera_location = player_view_point[0]  # 相机位置
+            camera_rotation = player_view_point[1]  # 相机旋转
+            
+            # 计算子弹生成位置 (枪口位置)
+            # 尝试从角色网格体获取武器插槽位置
+            socket_location = None
+            if self.Mesh and hasattr(self.Mesh, "GetSocketLocation"):
+                try:
+                    socket_location = self.Mesh.GetSocketLocation("WeaponSocket")
+                    if socket_location:
+                        ue.LogWarning(f"从武器插槽获取发射位置: {socket_location}")
+                except Exception as socket_error:
+                    ue.LogWarning(f"获取插槽位置失败: {socket_error}，将使用角色位置")
+            
+            # 如果无法获取插槽位置，使用角色位置加上偏移
+            if not socket_location:
+                actor_location = self.GetActorLocation()
+                forward_vector = ue.KismetMathLibrary.GetForwardVector(self.GetActorRotation())
+                offset = ue.KismetMathLibrary.Multiply_VectorFloat(forward_vector, 100.0)  # 前方100单位
+                offset.Z += 50.0  # 上方50单位
+                spawn_location = ue.KismetMathLibrary.Add_VectorVector(actor_location, offset)
+            else:
+                spawn_location = socket_location
+            
+            # 加载子弹蓝图类
+            bullet_class = ue.LoadClass("/Game/ThirdPersonCPP/Blueprints/Bullet/CharacterSharpBullet.CharacterSharpBullet_C")
+            if not bullet_class:
+                ue.LogError("无法加载子弹蓝图类")
+                return False
+            
+            # 计算子弹飞行方向
+            target_direction = None
+            
+            # 首先尝试从鼠标点击位置获取方向
+            hit_tuple = controller.GetHitResultUnderCursorByChannel(
+                ue.ETraceTypeQuery.TraceTypeQuery1,  # 默认通道
+                True  # 复杂碰撞检测
+            )
+            has_hit = hit_tuple[0]
+            hit_result = hit_tuple[1]
+            
+            if has_hit:
+                # 如果射线命中了物体，使用命中点方向
+                target_location = hit_result.Location
+                target_direction = ue.KismetMathLibrary.GetDirectionUnitVector(
+                    spawn_location, 
+                    target_location
+                )
+                ue.LogWarning(f"根据射线命中点设置子弹方向: {target_direction}")
+            else:
+                # 使用相机前方向作为子弹方向
+                target_direction = ue.KismetMathLibrary.GetForwardVector(camera_rotation)
+                ue.LogWarning(f"使用相机朝向作为子弹方向: {target_direction}")
+            
+            # 使用计算的方向设置子弹旋转
+            bullet_rotation = ue.KismetMathLibrary.MakeRotFromX(target_direction)
+            
+            # 生成子弹Actor
+            world = self.GetWorld()
+            if world:
+                try:
+                    # 在UE Python绑定中，使用标准的SpawnActor方式
+                    bullet = world.SpawnActor(bullet_class, spawn_location, bullet_rotation)
+                    if bullet:
+                        ue.LogWarning(f"成功生成子弹: {bullet}")
+                        
+                        # 如果子弹有ProjectileMovement组件，设置初始速度
+                        if hasattr(bullet, "ProjectileMovement"):
+                            if hasattr(bullet, "InitialSpeed"):
+                                bullet.ProjectileMovement.InitialSpeed = bullet.InitialSpeed
+                                bullet.ProjectileMovement.MaxSpeed = bullet.InitialSpeed
+                                ue.LogWarning(f"设置子弹速度: {bullet.InitialSpeed}")
+                            else:
+                                # 设置默认速度
+                                bullet.ProjectileMovement.InitialSpeed = 3000.0
+                                bullet.ProjectileMovement.MaxSpeed = 3000.0
+                                ue.LogWarning("设置子弹默认速度: 3000")
+                        
+                        return True
+                    else:
+                        ue.LogError("子弹生成失败")
+                except Exception as spawn_error:
+                    ue.LogError(f"生成子弹时出错: {spawn_error}")
+                    return False
+            else:
+                ue.LogError("无法获取World实例")
+                
+            return False
+        except Exception as e:
+            import traceback
+            ue.LogError(f"执行发射子弹逻辑时出错: {str(e)}")
+            ue.LogError(traceback.format_exc())
+            return False
+    
     @ue.ufunction(BlueprintCallable=True, Category="Combat")
     def _attack_started(self):
         """处理攻击开始事件，对应蓝图中的MyAttack输入动作的Started事件"""
@@ -400,6 +522,14 @@ class MyCharacter(ue.Character):
                 # 播放蒙太奇并获取持续时间
                 play_rate = 1.0
                 montage_duration = anim_instance.Montage_Play(montage, play_rate)
+                
+                # 触发FireBullet委托，发射子弹
+                # 检查弹药数量
+                if self.WeaopnBulletNumber > 0:
+                    # 触发FireBullet委托
+                    self.FireBullet.Broadcast()
+                else:
+                    ue.LogWarning("弹药不足，无法发射子弹")
                 
                 # 注册动画混出事件回调
                 if hasattr(anim_instance, 'OnMontageBlendingOut'):
