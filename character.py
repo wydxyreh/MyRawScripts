@@ -147,181 +147,118 @@ class MyCharacter(ue.Character):
             # 使用Character类的标准网格体组件
             mesh_to_use = self.GetMesh() if hasattr(self, 'GetMesh') else self.Mesh
             
-            # 记录网格体详细信息 (用于调试)
-            mesh_info = {}
-            mesh_name = "未知网格体"
-            
-            if mesh_to_use:
-                # 获取网格体的路径名
-                if hasattr(mesh_to_use, 'GetPathName'):
-                    mesh_info['PathName'] = mesh_to_use.GetPathName()
+            if not mesh_to_use:
+                ue.LogError(f"[动画-{tag}] 获取网格体组件失败")
+                return False
                 
-                # 获取SkeletalMesh资源
-                if hasattr(mesh_to_use, 'SkeletalMesh') and mesh_to_use.SkeletalMesh:
-                    mesh_name = mesh_to_use.SkeletalMesh.GetName()
-                    mesh_info['SkeletalMesh'] = mesh_name
-                    
-                # 获取AnimClass路径
-                if hasattr(mesh_to_use, 'AnimClass') and mesh_to_use.AnimClass:
-                    mesh_info['AnimClass'] = mesh_to_use.AnimClass.GetPathName() if hasattr(mesh_to_use.AnimClass, 'GetPathName') else str(mesh_to_use.AnimClass)
-            
-            ue.LogWarning(f"[动画-{tag}] 使用网格体播放动画: {mesh_info}")
-            
             # 加载蒙太奇
             montage = ue.LoadObject(ue.AnimMontage, montage_path)
             if not montage:
                 ue.LogError(f"[动画-{tag}] 无法加载动画蒙太奇: {montage_path}")
                 return False
             
-            # 尝试通过UE4的BlueprintFunctionLibrary类查找播放蒙太奇的函数
-            try:
-                # 尝试查找可能存在的播放动画相关蓝图函数库类
-                animation_lib_classes = [
-                    'AnimationFunctionLibrary',
-                    'PlayMontageCallbackProxy',
-                    'AnimInstancePlayMontage'
-                ]
-                
-                for class_name in animation_lib_classes:
-                    lib_class = ue.FindClass(class_name)
-                    if lib_class:
-                        ue.LogWarning(f"[动画-{tag}] 找到动画函数库类: {class_name}")
+            ue.LogWarning(f"[动画-{tag}] 已加载蒙太奇: {montage.GetName() if hasattr(montage, 'GetName') else montage_path}")
+            
+            # 优先使用Character类的PlayAnimMontage方法
+            # if hasattr(self, 'PlayAnimMontage'):
+            #     try:
+            #         duration = self.PlayAnimMontage(montage, play_rate, start_section_name)
+            #         if duration > 0:
+            #             ue.LogWarning(f"[动画-{tag}] 通过Character.PlayAnimMontage成功播放蒙太奇，持续时间: {duration}秒")
                         
-                        # 尝试找到类中的静态方法
-                        if hasattr(lib_class, 'PlayMontage') or hasattr(lib_class, 'CreateProxyObjectForPlayMontage'):
-                            method_name = 'PlayMontage' if hasattr(lib_class, 'PlayMontage') else 'CreateProxyObjectForPlayMontage'
-                            ue.LogWarning(f"[动画-{tag}] 找到静态方法: {method_name}")
-                            
-                            try:
-                                method = getattr(lib_class, method_name)
-                                result = method(mesh_to_use, montage, play_rate, 0.0, start_section_name)
-                                if result:
-                                    ue.LogWarning(f"[动画-{tag}] 通过静态方法成功播放蒙太奇")
-                                    
-                                    # 设置完成回调
-                                    if hasattr(result, 'OnCompleted') and completion_callback:
-                                        result.OnCompleted.Add(completion_callback)
-                                        
-                                    return True
-                            except Exception as method_error:
-                                ue.LogWarning(f"[动画-{tag}] 调用静态方法失败: {method_error}")
-                
-                # 尝试在当前角色蓝图中查找播放蒙太奇的自定义函数
-                custom_play_funcs = ['PlayAnimMontage', 'PlayMontage', 'PlayAnimationMontage']
-                for func_name in custom_play_funcs:
-                    if hasattr(self, func_name):
-                        try:
-                            getattr(self, func_name)(montage, play_rate, start_section_name)
-                            ue.LogWarning(f"[动画-{tag}] 通过角色的 {func_name} 函数播放蒙太奇")
-                            
-                            # 使用定时器设置完成回调
-                            if completion_callback:
-                                import threading
-                                animation_duration = montage.GetPlayLength() if hasattr(montage, 'GetPlayLength') else 1.5
-                                timer = threading.Timer(animation_duration, completion_callback)
-                                timer.start()
+            #             # 获取动画实例以设置回调
+            #             anim_instance = mesh_to_use.GetAnimInstance()
+            #             if anim_instance:
+            #                 # 设置回调
+            #                 self._setup_animation_callbacks(anim_instance, montage, completion_callback, tag)
+            #             else:
+            #                 # 如果无法获取动画实例，使用定时器作为备用
+            #                 if completion_callback:
+            #                     import threading
+            #                     timer = threading.Timer(duration / play_rate, completion_callback)
+            #                     timer.start()
+            #                     ue.LogWarning(f"[动画-{tag}] 使用定时器回调，将在{duration / play_rate}秒后调用")
                                 
-                            return True
-                        except Exception as e:
-                            ue.LogWarning(f"[动画-{tag}] 调用角色的 {func_name} 函数失败: {e}")
-            except Exception as proxy_error:
-                ue.LogWarning(f"[动画-{tag}] 使用高级方法播放蒙太奇失败: {proxy_error}，将使用直接方式播放")
-                
+            #             return True
+            #     except Exception as e:
+            #         ue.LogWarning(f"[动画-{tag}] 通过Character.PlayAnimMontage播放失败: {e}，尝试其他方法")
+            
             # 获取动画实例
             anim_instance = mesh_to_use.GetAnimInstance()
             if not anim_instance:
-                ue.LogError(f"[动画-{tag}] 无法获取网格体 {mesh_name} 的动画实例")
+                ue.LogError(f"[动画-{tag}] 无法获取动画实例")
                 return False
                 
             anim_instance_class = type(anim_instance).__name__
             ue.LogWarning(f"[动画-{tag}] 动画实例类型: {anim_instance_class}")
             
-            # 检查蒙太奇是否兼容此动画实例
-            if hasattr(anim_instance, 'Montage_Play'):
-                ue.LogWarning(f"[动画-{tag}] 开始播放动画蒙太奇: {montage.GetName()}")
-            
-                # 检查是否有其他蒙太奇正在播放
-                is_playing_montage = False
-                if hasattr(anim_instance, 'Montage_IsPlaying'):
-                    is_playing_montage = anim_instance.Montage_IsPlaying(None)  # None表示检查任何蒙太奇
-            
-                # 只有在已经有蒙太奇在播放的情况下才停止
-                if is_playing_montage and hasattr(anim_instance, 'Montage_Stop'):
-                    anim_instance.Montage_Stop(0.1)
-                    ue.LogWarning(f"[动画-{tag}] 停止其他正在播放的蒙太奇")
+            # 直接使用动画实例播放蒙太奇
+            # if hasattr(anim_instance, 'Montage_Play'):
+            #     # 检查是否有其他蒙太奇正在播放
+            #     if hasattr(anim_instance, 'Montage_IsPlaying') and anim_instance.Montage_IsPlaying(None):
+            #         if hasattr(anim_instance, 'Montage_Stop'):
+            #             anim_instance.Montage_Stop(0.25)  # 使用更平滑的混合时间
+            #             ue.LogWarning(f"[动画-{tag}] 停止其他正在播放的蒙太奇")
                 
-                # 播放蒙太奇并获取持续时间
-                montage_duration = anim_instance.Montage_Play(montage, play_rate)
+            #     # 播放蒙太奇并获取持续时间
+            #     montage_duration = anim_instance.Montage_Play(montage, play_rate)
             
-                if montage_duration > 0:
-                    ue.LogWarning(f"[动画-{tag}] 动画蒙太奇播放成功，持续时间: {montage_duration}秒，播放速率: {play_rate}")
+            #     if montage_duration > 0:
+            #         # 如果指定了起始节，跳转到该节
+            #         if start_section_name and hasattr(anim_instance, 'Montage_JumpToSection'):
+            #             anim_instance.Montage_JumpToSection(start_section_name, montage)
+            #             ue.LogWarning(f"[动画-{tag}] 跳转到节: {start_section_name}")
+                    
+            #         ue.LogWarning(f"[动画-{tag}] 动画蒙太奇播放成功，持续时间: {montage_duration}秒，播放速率: {play_rate}")
                 
-                    # 获取当前播放位置（应为0.0因为刚开始）
-                    current_position = anim_instance.Montage_GetPosition(montage)
-                    ue.LogWarning(f"[动画-{tag}] 动画起始位置: {current_position}，总长度: {montage_duration}")
-                
-                    # 设置回调
-                    self._setup_animation_callbacks(anim_instance, montage, completion_callback, tag)
-                    return True
-                else:
-                    ue.LogError(f"[动画-{tag}] 动画蒙太奇播放失败，返回持续时间: {montage_duration}")
-            else:
-                ue.LogWarning(f"[动画-{tag}] 动画实例 {anim_instance_class} 不支持 Montage_Play 方法，尝试备用播放方式")
+            #         # 设置回调
+            #         self._setup_animation_callbacks(anim_instance, montage, completion_callback, tag)
+            #         return True
+            #     else:
+            #         ue.LogError(f"[动画-{tag}] 动画蒙太奇播放失败，返回持续时间: {montage_duration}")
+            # else:
+            #     ue.LogWarning(f"[动画-{tag}] 动画实例 {anim_instance_class} 不支持 Montage_Play 方法，尝试备用播放方式")
             
-            # 备选方案1：尝试使用UE4的标准角色函数
-            if hasattr(self, 'PlayAnimMontage'):
-                try:
-                    duration = self.PlayAnimMontage(montage, play_rate, start_section_name)
-                    if duration > 0:
-                        ue.LogWarning(f"[动画-{tag}] 通过Character.PlayAnimMontage成功播放蒙太奇，持续时间: {duration}")
-                        
-                        # 设置完成回调
-                        if completion_callback:
-                            import threading
-                            timer = threading.Timer(duration, completion_callback)
-                            timer.start()
+            # 备选方案：尝试在动画实例中查找其他播放方法
+            # if anim_instance:
+            #     animation_functions = ['PlayAnimMontage', 'PlayAnimation', 'PlayMontage']
+            #     for func_name in animation_functions:
+            #         if hasattr(anim_instance, func_name):
+            #             try:
+            #                 result = getattr(anim_instance, func_name)(montage, play_rate)
+            #                 ue.LogWarning(f"[动画-{tag}] 通过动画实例的 {func_name} 函数播放蒙太奇")
                             
-                        return True
-                except Exception as e:
-                    ue.LogWarning(f"[动画-{tag}] 通过Character.PlayAnimMontage播放失败: {e}")
+            #                 # 设置完成回调
+            #                 if completion_callback:
+            #                     import threading
+            #                     animation_duration = montage.GetPlayLength() if hasattr(montage, 'GetPlayLength') else 1.5
+            #                     timer = threading.Timer(animation_duration / play_rate, completion_callback)
+            #                     timer.start()
+            #                     ue.LogWarning(f"[动画-{tag}] 使用定时器回调，将在{animation_duration / play_rate}秒后调用")
+                                
+            #                 return True
+            #             except Exception as func_ex:
+            #                 ue.LogWarning(f"[动画-{tag}] 调用动画实例的 {func_name} 函数失败: {func_ex}")
             
-            # 备选方案2：使用Mesh.PlayAnimation
+            # 最后尝试使用网格体的PlayAnimation
             if hasattr(mesh_to_use, 'PlayAnimation'):
                 try:
                     mesh_to_use.PlayAnimation(montage, False)
-                    ue.LogWarning(f"[动画-{tag}] 使用PlayAnimation备选方法播放动画")
+                    ue.LogWarning(f"[动画-{tag}] 使用网格体的PlayAnimation方法播放动画")
                     
                     # 设置定时器回调
                     if completion_callback:
                         import threading
                         animation_duration = montage.GetPlayLength() if hasattr(montage, 'GetPlayLength') else 1.5
-                        timer = threading.Timer(animation_duration, completion_callback)
+                        timer = threading.Timer(animation_duration / play_rate, completion_callback)
                         timer.start()
-                        ue.LogWarning(f"[动画-{tag}] 使用定时器回调，将在{animation_duration}秒后调用")
+                        ue.LogWarning(f"[动画-{tag}] 使用定时器回调，将在{animation_duration / play_rate}秒后调用")
                     return True
                 except Exception as anim_ex:
-                    ue.LogWarning(f"[动画-{tag}] 使用PlayAnimation播放失败: {anim_ex}")
+                    ue.LogWarning(f"[动画-{tag}] 使用网格体PlayAnimation播放失败: {anim_ex}")
             
-            # 备选方案3：尝试调用动画蓝图中与动画相关的公开函数
-            if anim_instance:
-                animation_functions = ['PlayAnimMontage', 'PlayAnimation', 'PlayMontage']
-                for func_name in animation_functions:
-                    if hasattr(anim_instance, func_name):
-                        try:
-                            result = getattr(anim_instance, func_name)(montage, play_rate)
-                            ue.LogWarning(f"[动画-{tag}] 通过动画实例的 {func_name} 函数播放蒙太奇")
-                            
-                            # 设置完成回调
-                            if completion_callback:
-                                import threading
-                                animation_duration = montage.GetPlayLength() if hasattr(montage, 'GetPlayLength') else 1.5
-                                timer = threading.Timer(animation_duration, completion_callback)
-                                timer.start()
-                                
-                            return True
-                        except Exception as func_ex:
-                            ue.LogWarning(f"[动画-{tag}] 调用动画实例的 {func_name} 函数失败: {func_ex}")
-            
+            # 如果所有方法都失败
+            ue.LogError(f"[动画-{tag}] 所有播放方法均失败，无法播放蒙太奇")
             return False
                 
         except Exception as e:
