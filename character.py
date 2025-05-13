@@ -2,7 +2,334 @@
 import ue
 @ue.uclass(BlueprintType=True)
 class MyCharacter(ue.Character):
-    # 定义元类，帮助Unreal Engine在蓝图系统中正确识别此类
+    def _reload_weapon(self):
+        """处理武器换弹逻辑，播放换弹动画蒙太奇"""
+        try:
+            # 如果已经在攻击中或换弹中，则不执行新的换弹动作
+            if self.AttackState:
+                ue.LogWarning("当前正在攻击状态，无法换弹")
+                return
+        
+            if hasattr(self, '_is_reloading') and self._is_reloading:
+                ue.LogWarning("已经在换弹中，忽略重复操作")
+                return
+        
+            # 检查是否有备用弹药可以装填
+            if not hasattr(self, 'AllBulletNumber'):
+                self.AllBulletNumber = 100  # 默认总弹药数
+            
+            if not hasattr(self, 'WeaopnBulletNumber'):
+                self.WeaopnBulletNumber = 0  # 默认当前弹药数
+            
+            if not hasattr(self, 'MaxWeaponBulletNumber'):
+                self.MaxWeaponBulletNumber = 30  # 默认武器最大弹药数
+            
+            # 如果没有备用弹药或武器已满，则不执行换弹
+            if self.AllBulletNumber <= 0:
+                ue.LogWarning("没有备用弹药可装填")
+                return
+        
+            if self.WeaopnBulletNumber >= self.MaxWeaponBulletNumber:
+                ue.LogWarning("武器弹药已满，无需换弹")
+                return
+            
+            # 设置换弹状态
+            self._is_reloading = True
+            self.LockOrientation = True  # 在换弹过程中锁定方向
+            
+            # 播放换弹动画
+            self._play_reload_animation()
+        
+        except Exception as e:
+            import traceback
+            ue.LogError(f"执行换弹功能时出错: {str(e)}")
+            ue.LogError(traceback.format_exc())
+            self._reset_reload_state()
+
+    def _play_reload_animation(self):
+        """播放换弹动画（由_reload_weapon调用）"""
+        montage_path = "/Game/Mannequin/Animations/My_Reload_Rifle_Hip_Montage.My_Reload_Rifle_Hip_Montage"
+        if not self._play_animation_montage(montage_path, self._complete_reload, 1.0, "", "reload"):
+            ue.LogError("[动画] 播放换弹动画失败")
+            self._reset_reload_state()
+    
+    def _complete_reload(self, *args):
+        """完成换弹操作，更新弹药数量
+        
+        参数:
+            *args: 可变参数列表，用于接收由蒙太奇回调传递的额外参数
+        """
+        try:
+            if not hasattr(self, '_is_reloading') or not self._is_reloading:
+                ue.LogWarning("尝试完成换弹，但当前不在换弹状态")
+                return
+        
+            # 计算需要装填的弹药量
+            needed_bullets = self.MaxWeaponBulletNumber - self.WeaopnBulletNumber
+        
+            # 实际能装填的弹药量(取决于备用弹药数量)
+            actual_reload = min(needed_bullets, self.AllBulletNumber)
+        
+            # 更新武器弹药和备用弹药
+            self.WeaopnBulletNumber += actual_reload
+            self.AllBulletNumber -= actual_reload
+        
+            ue.LogWarning(f"换弹完成! 当前武器弹药: {self.WeaopnBulletNumber}/{self.MaxWeaponBulletNumber}, 剩余备用弹药: {self.AllBulletNumber}")
+        
+            # 重置换弹状态
+            self._reset_reload_state()
+        
+        except Exception as e:
+            import traceback
+            ue.LogError(f"完成换弹操作时出错: {str(e)}")
+            ue.LogError(traceback.format_exc())
+            self._reset_reload_state()
+
+    def _reset_reload_state(self):
+        """重置换弹相关状态"""
+        try:
+            # 获取换弹状态前的值，用于日志
+            prev_reload_state = getattr(self, '_is_reloading', False)
+        
+            # 安全地重置换弹状态
+            self._is_reloading = False
+            self.LockOrientation = False
+        
+            # 确保角色回到待机状态
+            if self.Mesh:
+                # 停止所有当前正在播放的蒙太奇
+                anim_instance = self.Mesh.GetAnimInstance()
+                if anim_instance:
+                    # 如果当前有蒙太奇在播放，停止它
+                    if hasattr(anim_instance, 'Montage_Stop'):
+                        # 使用短暂的混合时间平滑过渡
+                        blend_out_time = 0.25
+                        anim_instance.Montage_Stop(blend_out_time)
+                        ue.LogWarning(f"[动画] 停止所有蒙太奇，混合时间: {blend_out_time}秒")
+                    
+                    # 彻底清理所有回调
+                    self._clean_all_montage_callbacks(anim_instance)
+        
+            ue.LogWarning(f"[状态] 重置换弹状态: 从 {prev_reload_state} 变为 {self._is_reloading}")
+        except Exception as e:
+            # 捕获所有可能的异常，确保不会崩溃
+            import traceback
+            ue.LogError(f"[动画] 重置换弹状态时发生错误: {str(e)}")
+            ue.LogError(traceback.format_exc())
+        
+            # 尝试最基本的重置以防止卡住
+            try:
+                self._is_reloading = False
+                self.LockOrientation = False
+            except:
+                pass
+    
+    def _play_animation_montage(self, montage_path, completion_callback, play_rate=1.0, start_section_name="", tag=""):
+        """
+        通用的动画蒙太奇播放函数
+        
+        Args:
+            montage_path (str): 动画蒙太奇资源路径
+            completion_callback (function): 动画完成后的回调函数
+            play_rate (float, optional): 播放速率. 默认为1.0.
+            start_section_name (str, optional): 起始节名称. 默认为"".
+            tag (str, optional): 标识此次播放的标签，用于日志输出. 默认为"".
+        
+        Returns:
+            bool: 是否成功开始播放
+        """
+        try:
+            # 检查主要角色网格体
+            if not self.Mesh:
+                ue.LogError(f"[动画-{tag}] 无法获取角色网格体组件")
+                return False
+            
+            # 使用Character类的标准网格体组件
+            mesh_to_use = self.GetMesh() if hasattr(self, 'GetMesh') else self.Mesh
+            
+            # 记录网格体详细信息 (用于调试)
+            mesh_info = {}
+            mesh_name = "未知网格体"
+            
+            if mesh_to_use:
+                # 获取网格体的路径名
+                if hasattr(mesh_to_use, 'GetPathName'):
+                    mesh_info['PathName'] = mesh_to_use.GetPathName()
+                
+                # 获取SkeletalMesh资源
+                if hasattr(mesh_to_use, 'SkeletalMesh') and mesh_to_use.SkeletalMesh:
+                    mesh_name = mesh_to_use.SkeletalMesh.GetName()
+                    mesh_info['SkeletalMesh'] = mesh_name
+                    
+                # 获取AnimClass路径
+                if hasattr(mesh_to_use, 'AnimClass') and mesh_to_use.AnimClass:
+                    mesh_info['AnimClass'] = mesh_to_use.AnimClass.GetPathName() if hasattr(mesh_to_use.AnimClass, 'GetPathName') else str(mesh_to_use.AnimClass)
+            
+            ue.LogWarning(f"[动画-{tag}] 使用网格体播放动画: {mesh_info}")
+            
+            # 加载蒙太奇
+            montage = ue.LoadObject(ue.AnimMontage, montage_path)
+            if not montage:
+                ue.LogError(f"[动画-{tag}] 无法加载动画蒙太奇: {montage_path}")
+                return False
+            
+            # 尝试通过UE4的BlueprintFunctionLibrary类查找播放蒙太奇的函数
+            try:
+                # 尝试查找可能存在的播放动画相关蓝图函数库类
+                animation_lib_classes = [
+                    'AnimationFunctionLibrary',
+                    'PlayMontageCallbackProxy',
+                    'AnimInstancePlayMontage'
+                ]
+                
+                for class_name in animation_lib_classes:
+                    lib_class = ue.FindClass(class_name)
+                    if lib_class:
+                        ue.LogWarning(f"[动画-{tag}] 找到动画函数库类: {class_name}")
+                        
+                        # 尝试找到类中的静态方法
+                        if hasattr(lib_class, 'PlayMontage') or hasattr(lib_class, 'CreateProxyObjectForPlayMontage'):
+                            method_name = 'PlayMontage' if hasattr(lib_class, 'PlayMontage') else 'CreateProxyObjectForPlayMontage'
+                            ue.LogWarning(f"[动画-{tag}] 找到静态方法: {method_name}")
+                            
+                            try:
+                                method = getattr(lib_class, method_name)
+                                result = method(mesh_to_use, montage, play_rate, 0.0, start_section_name)
+                                if result:
+                                    ue.LogWarning(f"[动画-{tag}] 通过静态方法成功播放蒙太奇")
+                                    
+                                    # 设置完成回调
+                                    if hasattr(result, 'OnCompleted') and completion_callback:
+                                        result.OnCompleted.Add(completion_callback)
+                                        
+                                    return True
+                            except Exception as method_error:
+                                ue.LogWarning(f"[动画-{tag}] 调用静态方法失败: {method_error}")
+                
+                # 尝试在当前角色蓝图中查找播放蒙太奇的自定义函数
+                custom_play_funcs = ['PlayAnimMontage', 'PlayMontage', 'PlayAnimationMontage']
+                for func_name in custom_play_funcs:
+                    if hasattr(self, func_name):
+                        try:
+                            getattr(self, func_name)(montage, play_rate, start_section_name)
+                            ue.LogWarning(f"[动画-{tag}] 通过角色的 {func_name} 函数播放蒙太奇")
+                            
+                            # 使用定时器设置完成回调
+                            if completion_callback:
+                                import threading
+                                animation_duration = montage.GetPlayLength() if hasattr(montage, 'GetPlayLength') else 1.5
+                                timer = threading.Timer(animation_duration, completion_callback)
+                                timer.start()
+                                
+                            return True
+                        except Exception as e:
+                            ue.LogWarning(f"[动画-{tag}] 调用角色的 {func_name} 函数失败: {e}")
+            except Exception as proxy_error:
+                ue.LogWarning(f"[动画-{tag}] 使用高级方法播放蒙太奇失败: {proxy_error}，将使用直接方式播放")
+                
+            # 获取动画实例
+            anim_instance = mesh_to_use.GetAnimInstance()
+            if not anim_instance:
+                ue.LogError(f"[动画-{tag}] 无法获取网格体 {mesh_name} 的动画实例")
+                return False
+                
+            anim_instance_class = type(anim_instance).__name__
+            ue.LogWarning(f"[动画-{tag}] 动画实例类型: {anim_instance_class}")
+            
+            # 检查蒙太奇是否兼容此动画实例
+            if hasattr(anim_instance, 'Montage_Play'):
+                ue.LogWarning(f"[动画-{tag}] 开始播放动画蒙太奇: {montage.GetName()}")
+            
+                # 检查是否有其他蒙太奇正在播放
+                is_playing_montage = False
+                if hasattr(anim_instance, 'Montage_IsPlaying'):
+                    is_playing_montage = anim_instance.Montage_IsPlaying(None)  # None表示检查任何蒙太奇
+            
+                # 只有在已经有蒙太奇在播放的情况下才停止
+                if is_playing_montage and hasattr(anim_instance, 'Montage_Stop'):
+                    anim_instance.Montage_Stop(0.1)
+                    ue.LogWarning(f"[动画-{tag}] 停止其他正在播放的蒙太奇")
+                
+                # 播放蒙太奇并获取持续时间
+                montage_duration = anim_instance.Montage_Play(montage, play_rate)
+            
+                if montage_duration > 0:
+                    ue.LogWarning(f"[动画-{tag}] 动画蒙太奇播放成功，持续时间: {montage_duration}秒，播放速率: {play_rate}")
+                
+                    # 获取当前播放位置（应为0.0因为刚开始）
+                    current_position = anim_instance.Montage_GetPosition(montage)
+                    ue.LogWarning(f"[动画-{tag}] 动画起始位置: {current_position}，总长度: {montage_duration}")
+                
+                    # 设置回调
+                    self._setup_animation_callbacks(anim_instance, montage, completion_callback, tag)
+                    return True
+                else:
+                    ue.LogError(f"[动画-{tag}] 动画蒙太奇播放失败，返回持续时间: {montage_duration}")
+            else:
+                ue.LogWarning(f"[动画-{tag}] 动画实例 {anim_instance_class} 不支持 Montage_Play 方法，尝试备用播放方式")
+            
+            # 备选方案1：尝试使用UE4的标准角色函数
+            if hasattr(self, 'PlayAnimMontage'):
+                try:
+                    duration = self.PlayAnimMontage(montage, play_rate, start_section_name)
+                    if duration > 0:
+                        ue.LogWarning(f"[动画-{tag}] 通过Character.PlayAnimMontage成功播放蒙太奇，持续时间: {duration}")
+                        
+                        # 设置完成回调
+                        if completion_callback:
+                            import threading
+                            timer = threading.Timer(duration, completion_callback)
+                            timer.start()
+                            
+                        return True
+                except Exception as e:
+                    ue.LogWarning(f"[动画-{tag}] 通过Character.PlayAnimMontage播放失败: {e}")
+            
+            # 备选方案2：使用Mesh.PlayAnimation
+            if hasattr(mesh_to_use, 'PlayAnimation'):
+                try:
+                    mesh_to_use.PlayAnimation(montage, False)
+                    ue.LogWarning(f"[动画-{tag}] 使用PlayAnimation备选方法播放动画")
+                    
+                    # 设置定时器回调
+                    if completion_callback:
+                        import threading
+                        animation_duration = montage.GetPlayLength() if hasattr(montage, 'GetPlayLength') else 1.5
+                        timer = threading.Timer(animation_duration, completion_callback)
+                        timer.start()
+                        ue.LogWarning(f"[动画-{tag}] 使用定时器回调，将在{animation_duration}秒后调用")
+                    return True
+                except Exception as anim_ex:
+                    ue.LogWarning(f"[动画-{tag}] 使用PlayAnimation播放失败: {anim_ex}")
+            
+            # 备选方案3：尝试调用动画蓝图中与动画相关的公开函数
+            if anim_instance:
+                animation_functions = ['PlayAnimMontage', 'PlayAnimation', 'PlayMontage']
+                for func_name in animation_functions:
+                    if hasattr(anim_instance, func_name):
+                        try:
+                            result = getattr(anim_instance, func_name)(montage, play_rate)
+                            ue.LogWarning(f"[动画-{tag}] 通过动画实例的 {func_name} 函数播放蒙太奇")
+                            
+                            # 设置完成回调
+                            if completion_callback:
+                                import threading
+                                animation_duration = montage.GetPlayLength() if hasattr(montage, 'GetPlayLength') else 1.5
+                                timer = threading.Timer(animation_duration, completion_callback)
+                                timer.start()
+                                
+                            return True
+                        except Exception as func_ex:
+                            ue.LogWarning(f"[动画-{tag}] 调用动画实例的 {func_name} 函数失败: {func_ex}")
+            
+            return False
+                
+        except Exception as e:
+            import traceback
+            ue.LogError(f"[动画-{tag}] 播放动画时出错: {str(e)}")
+            ue.LogError(traceback.format_exc())
+            return False
+    
     @classmethod
     def _unreal_skeleton_class(cls):
         # 这里指定我们的Python类要使用的真实蓝图类型
@@ -16,11 +343,9 @@ class MyCharacter(ue.Character):
             # 获取动画实例
             if self.Mesh:
                 anim_instance = self.Mesh.GetAnimInstance()
-                if anim_instance and hasattr(anim_instance, 'OnMontageBlendingOut'):
-                    # 移除所有注册的回调
-                    for delegate_name in ['_blend_out_delegate', '_default_blend_out_delegate']:
-                        if hasattr(self, delegate_name):
-                            anim_instance.OnMontageBlendingOut.Remove(getattr(self, delegate_name))
+                if anim_instance:
+                    # 使用新的清理函数移除所有回调
+                    self._clean_all_montage_callbacks(anim_instance)
                         
             ue.LogWarning('角色退出游戏，已清理所有回调')
         except Exception as e:
@@ -547,157 +872,180 @@ class MyCharacter(ue.Character):
     
     def _play_attack_animation(self):
         """播放攻击动画（该方法专门负责动画播放，由_attack_started调用）"""
-        try:
-            if not self.Mesh:
-                ue.LogError("无法获取角色网格体组件")
-                self._reset_attack_state()
-                return
-                
-            montage = ue.LoadObject(ue.AnimMontage, "/Game/Mannequin/Animations/My_Fire_Rifle_Hip1_Montage.My_Fire_Rifle_Hip1_Montage")
-            if not montage:
-                ue.LogError("无法加载攻击动画蒙太奇")
-                self._reset_attack_state()
-                return
-                
-            # 获取动画实例
-            anim_instance = self.Mesh.GetAnimInstance()
-            
-            # 尝试使用Montage_Play播放动画
-            if anim_instance and hasattr(anim_instance, 'Montage_Play'):
-                # 设置播放参数
-                play_rate = 1.0
-                start_section_name = ""  # 可指定从特定Section开始播放，空字符串表示默认Section
-                
-                ue.LogWarning(f"[动画] 开始播放攻击动画蒙太奇: {montage.GetName()}")
-                
-                # 播放蒙太奇并获取持续时间
-                montage_duration = anim_instance.Montage_Play(montage, play_rate)
-                
-                if montage_duration > 0:
-                    ue.LogWarning(f"[动画] 攻击动画蒙太奇播放成功，持续时间: {montage_duration}秒，播放速率: {play_rate}")
-                    
-                    # 获取当前播放位置（应为0.0因为刚开始）
-                    current_position = anim_instance.Montage_GetPosition(montage)
-                    ue.LogWarning(f"[动画] 攻击动画起始位置: {current_position}，总长度: {montage_duration}")
-                    
-                    # 触发FireBullet委托，发射子弹
-                    if self.WeaopnBulletNumber > 0:
-                        self.FireBullet.Broadcast()
-                        ue.LogWarning("[动画] 触发发射子弹事件")
-                    else:
-                        ue.LogWarning("[动画] 弹药不足，无法发射子弹")
-                
-                    # 注册所有相关的动画回调
-                    self._setup_montage_callbacks(anim_instance, montage)
-                    return
-                else:
-                    ue.LogError(f"[动画] 攻击动画蒙太奇播放失败，返回持续时间: {montage_duration}")
-            else:
-                ue.LogWarning("[动画] 无法使用Montage_Play，尝试备用播放方式")
-            
-            # 备选方案1：使用Mesh.PlayAnimation（如果可用）
-            if hasattr(self.Mesh, 'PlayAnimation'):
-                self.Mesh.PlayAnimation(montage, False)
-                ue.LogWarning("[动画] 使用PlayAnimation备选方法播放攻击动画")
-                
-                # 进行必要的操作（发射子弹）
-                if self.WeaopnBulletNumber > 0:
-                    self.FireBullet.Broadcast()
-            
-            # 备选方案2：使用定时器作为退路
-            animation_duration = montage.GetPlayLength() if hasattr(montage, 'GetPlayLength') else 1.5
-            
-            try:
-                import threading
-                timer = threading.Timer(animation_duration, self._reset_attack_state)
-                timer.start()
-                ue.LogWarning(f"[动画] 使用定时器作为备选，将在{animation_duration}秒后重置状态")
-            except Exception as timer_ex:
-                ue.LogError(f"[动画] 设置定时器失败: {str(timer_ex)}")
-                self._reset_attack_state()
-                
-        except Exception as e:
-            import traceback
-            ue.LogError(f"[动画] 播放攻击动画时出错: {str(e)}")
-            ue.LogError(traceback.format_exc())
+        montage_path = "/Game/Mannequin/Animations/My_Fire_Rifle_Hip_Montage.My_Fire_Rifle_Hip_Montage"
+        
+        # 播放前触发发射子弹事件
+        if self.WeaopnBulletNumber > 0:
+            self.FireBullet.Broadcast()
+            ue.LogWarning("[动画] 触发发射子弹事件")
+        
+        # 播放攻击动画
+        if not self._play_animation_montage(montage_path, self._reset_attack_state, 1.0, "", "attack"):
+            ue.LogError("[动画] 播放攻击动画失败")
             self._reset_attack_state()
-    
-    def _setup_montage_callbacks(self, anim_instance, montage):
-        """设置动画蒙太奇的所有必要回调"""
+        
+    def _setup_animation_callbacks(self, anim_instance, montage, completion_callback, callback_prefix=""):
+        """统一的动画回调设置函数，替代多个重复的回调设置函数
+        
+        Args:
+            anim_instance: 动画实例对象
+            montage: 播放的动画蒙太奇对象
+            completion_callback: 动画完成时调用的回调函数
+            callback_prefix: 回调函数和属性名的前缀，用于区分不同类型的动画
+        """
         try:
+            delegate_prefix = f"_{callback_prefix}_" if callback_prefix else "_"
+            
+            # 首先彻底清理所有已存在的回调
+            self._clean_all_montage_callbacks(anim_instance)
+            
+            # 保存当前激活的回调前缀，用于后续清理
+            self._current_active_montage_prefix = callback_prefix
+            
             # 1. 注册混出事件回调
             if hasattr(anim_instance, 'OnMontageBlendingOut'):
-                # 先移除可能存在的旧回调以避免重复
-                if hasattr(self, '_blend_out_delegate'):
-                    anim_instance.OnMontageBlendingOut.Remove(self._blend_out_delegate)
-                
                 # 创建新的回调函数
                 def on_blend_out(blend_montage, interrupted):
                     montage_name = blend_montage.GetName() if hasattr(blend_montage, 'GetName') else "Unknown"
-                    ue.LogWarning(f"[动画回调] 蒙太奇混出: {montage_name}, 中断状态: {interrupted}")
-                    self._reset_attack_state()
+                    ue.LogWarning(f"[动画回调] {callback_prefix}蒙太奇混出: {montage_name}, 中断状态: {interrupted}")
+                    if completion_callback:
+                        completion_callback()
                 
                 # 保存回调引用以便之后移除
-                self._blend_out_delegate = on_blend_out
+                blend_out_delegate_name = f"{delegate_prefix}blend_out_delegate"
+                setattr(self, blend_out_delegate_name, on_blend_out)
                 
                 # 注册混出回调
-                anim_instance.OnMontageBlendingOut.Add(self._blend_out_delegate)
-                ue.LogWarning("[动画] 已注册蒙太奇混出回调")
+                anim_instance.OnMontageBlendingOut.Add(getattr(self, blend_out_delegate_name))
+                ue.LogWarning(f"[动画] 已注册{callback_prefix}蒙太奇混出回调")
             
             # 2. 注册结束事件回调
             if hasattr(anim_instance, 'OnMontageEnded'):
-                # 先移除可能存在的旧回调
-                if hasattr(self, '_montage_ended_delegate'):
-                    anim_instance.OnMontageEnded.Remove(self._montage_ended_delegate)
-                
                 # 创建新的回调函数
                 def on_montage_ended(ended_montage, interrupted):
                     montage_name = ended_montage.GetName() if hasattr(ended_montage, 'GetName') else "Unknown"
-                    ue.LogWarning(f"[动画回调] 蒙太奇结束: {montage_name}, 中断状态: {interrupted}")
+                    ue.LogWarning(f"[动画回调] {callback_prefix}蒙太奇结束: {montage_name}, 中断状态: {interrupted}")
+                    
+                    # 动画结束时也要清理所有回调
+                    self._clean_all_montage_callbacks(anim_instance)
                 
                 # 保存回调引用
-                self._montage_ended_delegate = on_montage_ended
+                montage_ended_delegate_name = f"{delegate_prefix}montage_ended_delegate"
+                setattr(self, montage_ended_delegate_name, on_montage_ended)
                 
                 # 注册结束回调
-                anim_instance.OnMontageEnded.Add(self._montage_ended_delegate)
-                ue.LogWarning("[动画] 已注册蒙太奇结束回调")
+                anim_instance.OnMontageEnded.Add(getattr(self, montage_ended_delegate_name))
+                ue.LogWarning(f"[动画] 已注册{callback_prefix}蒙太奇结束回调")
             
-            # 3. 注册开始事件回调
+            # 3. 注册开始事件回调（可选）
             if hasattr(anim_instance, 'OnMontageStarted'):
-                # 先移除可能存在的旧回调
-                if hasattr(self, '_montage_started_delegate'):
-                    anim_instance.OnMontageStarted.Remove(self._montage_started_delegate)
-                
                 # 创建新的回调函数
                 def on_montage_started(started_montage):
                     montage_name = started_montage.GetName() if hasattr(started_montage, 'GetName') else "Unknown"
-                    ue.LogWarning(f"[动画回调] 蒙太奇开始: {montage_name}")
+                    ue.LogWarning(f"[动画回调] {callback_prefix}蒙太奇开始: {montage_name}")
                     
                 # 保存回调引用
-                self._montage_started_delegate = on_montage_started
+                montage_started_delegate_name = f"{delegate_prefix}montage_started_delegate"
+                setattr(self, montage_started_delegate_name, on_montage_started)
                 
                 # 注册开始回调
-                anim_instance.OnMontageStarted.Add(self._montage_started_delegate)
-                ue.LogWarning("[动画] 已注册蒙太奇开始回调")
+                anim_instance.OnMontageStarted.Add(getattr(self, montage_started_delegate_name))
+                ue.LogWarning(f"[动画] 已注册{callback_prefix}蒙太奇开始回调")
             
         except Exception as e:
             import traceback
-            ue.LogError(f"[动画] 设置蒙太奇回调时出错: {str(e)}")
+            ue.LogError(f"[动画] 设置{callback_prefix}蒙太奇回调时出错: {str(e)}")
+            ue.LogError(traceback.format_exc())
+
+    def _clean_montage_callback(self, anim_instance, callback_type, callback_prefix=None):
+        """清理指定类型的蒙太奇回调
+        
+        Args:
+            anim_instance: 动画实例对象
+            callback_type: 回调类型，可以是 "blend_out", "ended", "started" 等
+            callback_prefix: 回调前缀，如果为None则使用当前活动的前缀
+        """
+        try:
+            # 获取当前活动的回调前缀
+            prefix = callback_prefix if callback_prefix is not None else getattr(self, '_current_active_montage_prefix', "")
+            delegate_prefix = f"_{prefix}_" if prefix else "_"
+            
+            # 构建完整的委托名称
+            delegate_name = f"{delegate_prefix}{callback_type}_delegate"
+            
+            # 根据回调类型移除不同的回调
+            if callback_type == "blend_out" and hasattr(anim_instance, 'OnMontageBlendingOut'):
+                if hasattr(self, delegate_name):
+                    anim_instance.OnMontageBlendingOut.Remove(getattr(self, delegate_name))
+                    ue.LogWarning(f"[动画清理] 已移除{prefix}蒙太奇混出回调")
+                    delattr(self, delegate_name)
+                    
+            elif callback_type == "ended" and hasattr(anim_instance, 'OnMontageEnded'):
+                if hasattr(self, delegate_name):
+                    anim_instance.OnMontageEnded.Remove(getattr(self, delegate_name))
+                    ue.LogWarning(f"[动画清理] 已移除{prefix}蒙太奇结束回调")
+                    delattr(self, delegate_name)
+                    
+            elif callback_type == "started" and hasattr(anim_instance, 'OnMontageStarted'):
+                if hasattr(self, delegate_name):
+                    anim_instance.OnMontageStarted.Remove(getattr(self, delegate_name))
+                    ue.LogWarning(f"[动画清理] 已移除{prefix}蒙太奇开始回调")
+                    delattr(self, delegate_name)
+                    
+        except Exception as e:
+            import traceback
+            ue.LogError(f"[动画清理] 清理{callback_type}回调时出错: {str(e)}")
+            ue.LogError(traceback.format_exc())
+            
+    def _clean_all_montage_callbacks(self, anim_instance):
+        """清理所有蒙太奇回调类型
+        
+        Args:
+            anim_instance: 动画实例对象
+        """
+        try:
+            # 清理所有可能的回调类型
+            callback_types = ["blend_out", "ended", "started"]
+            
+            # 清理与不同前缀相关的所有回调
+            prefixes = ["attack", "reload", ""]  # 包含空字符串以处理没有前缀的情况
+            
+            # 直接移除所有委托，不依赖于属性检查
+            if hasattr(anim_instance, 'OnMontageBlendingOut'):
+                anim_instance.OnMontageBlendingOut.Clear()
+                
+            if hasattr(anim_instance, 'OnMontageEnded'):
+                anim_instance.OnMontageEnded.Clear()
+                
+            if hasattr(anim_instance, 'OnMontageStarted'):
+                anim_instance.OnMontageStarted.Clear()
+            
+            # 清除所有已保存的委托引用
+            for prefix in prefixes:
+                delegate_prefix = f"_{prefix}_" if prefix else "_"
+                for callback_type in callback_types:
+                    delegate_name = f"{delegate_prefix}{callback_type}_delegate"
+                    if hasattr(self, delegate_name):
+                        delattr(self, delegate_name)
+            
+            ue.LogWarning("[动画清理] 已清理所有蒙太奇回调")
+                    
+        except Exception as e:
+            import traceback
+            ue.LogError(f"[动画清理] 清理所有回调时出错: {str(e)}")
             ue.LogError(traceback.format_exc())
     
     def _reset_attack_state(self):
-        """重置攻击相关状态并确保角色回到待机状态"""
+        """重置攻击状态，在攻击动画结束时调用"""
         try:
             # 获取攻击状态前的值，用于日志
             prev_attack_state = self.AttackState
-            prev_lock_orientation = self.LockOrientation
-            
+        
             # 安全地重置攻击状态
             self.AttackState = False
             self.LockOrientation = False
-            
+        
             # 确保角色回到待机状态
-            # 获取角色的Mesh组件
             if self.Mesh:
                 # 停止所有当前正在播放的蒙太奇
                 anim_instance = self.Mesh.GetAnimInstance()
@@ -708,44 +1056,23 @@ class MyCharacter(ue.Character):
                         blend_out_time = 0.25
                         anim_instance.Montage_Stop(blend_out_time)
                         ue.LogWarning(f"[动画] 停止所有蒙太奇，混合时间: {blend_out_time}秒")
-                    
-                    # 确保角色回到待机状态 - 这是关键部分
-                    # 通过直接设置角色动画蓝图中的状态机变量，使其回到默认的待机状态循环
-                    if hasattr(anim_instance, 'SetVariableByName'):
-                        # 重置所有可能影响待机状态的变量
-                        anim_instance.SetVariableByName('bIsFalling', False)
-                        anim_instance.SetVariableByName('bIsAttacking', False)
-                        anim_instance.SetVariableByName('bIsInAir', False)
-                        ue.LogWarning("[动画] 重置动画蓝图状态机变量")
                         
-                    # 获取当前播放的蒙太奇(如果存在)，记录日志
-                    if hasattr(anim_instance, 'GetCurrentActiveMontage'):
-                        current_montage = anim_instance.GetCurrentActiveMontage()
-                        if current_montage:
-                            montage_name = current_montage.GetName() if hasattr(current_montage, 'GetName') else "Unknown"
-                            ue.LogWarning(f"[动画] 当前活动蒙太奇: {montage_name}")
-            
-            ue.LogWarning(f"[状态] 重置攻击状态: 攻击状态从 {prev_attack_state} 变为 {self.AttackState}，方向锁定从 {prev_lock_orientation} 变为 {self.LockOrientation}")
+                    # 彻底清理所有回调
+                    self._clean_all_montage_callbacks(anim_instance)
+        
+            ue.LogWarning(f"[状态] 重置攻击状态: 从 {prev_attack_state} 变为 {self.AttackState}")
         except Exception as e:
             # 捕获所有可能的异常，确保不会崩溃
             import traceback
             ue.LogError(f"[动画] 重置攻击状态时发生错误: {str(e)}")
             ue.LogError(traceback.format_exc())
-            
+        
             # 尝试最基本的重置以防止卡住
             try:
                 self.AttackState = False
                 self.LockOrientation = False
             except:
                 pass
-        
-    def _on_attack_animation_end(self):
-        """攻击动画结束时的回调函数"""
-        self._reset_attack_state()
-        
-    def _on_empty_ammo(self):
-        """弹药为空时的回调函数，对应蓝图中的自定义事件"""
-        self._reset_attack_state()
     
     def _check_network_ready(self):
         """
@@ -1501,54 +1828,6 @@ class MyCharacter(ue.Character):
     def _jump(self):
         self.Jump()
 
-    # Enhanced Input回调函数 - 以相机方向为中心
-    def _on_move(self, value):
-        # 获取value中的输入值 (FInputActionValue)
-        input_value = value.Get()
-        
-        # 在NePythonBinding中Vector2D代替FVector2D
-        if hasattr(ue, "Vector2D") and isinstance(input_value, ue.Vector2D):
-            vector2d_type = ue.Vector2D
-        elif hasattr(ue, "FVector2D") and isinstance(input_value, ue.FVector2D):
-            vector2d_type = ue.FVector2D
-        else:
-            # 不能确定具体类型，尝试直接使用
-            # 假设输入值有X和Y属性
-            x_value = getattr(input_value, "X", 0)
-            y_value = getattr(input_value, "Y", 0)
-            
-            # 获取控制器的旋转（即相机的方向）
-            controller_rotation = self.Controller.GetControlRotation()
-            # 只使用Yaw旋转创建新的旋转器
-            yaw_rotation = ue.Rotator(0.0, controller_rotation.Yaw, 0.0)
-            
-            # 从旋转器获取前进和右方向向量
-            if hasattr(ue, "KismetMathLibrary"):
-                forward_direction = ue.KismetMathLibrary.GetForwardVector(yaw_rotation)
-                right_direction = ue.KismetMathLibrary.GetRightVector(yaw_rotation)
-            else:
-                forward_direction = yaw_rotation.GetForwardVector()
-                right_direction = yaw_rotation.GetRightVector()
-            
-            # 添加移动输入
-            self.AddMovementInput(forward_direction, y_value)
-            self.AddMovementInput(right_direction, x_value)
-    
-    def _on_look(self, value):
-        input_value = value.Get()
-        
-        if isinstance(input_value, ue.FVector2D):
-            # 添加视角输入
-            self.AddControllerYawInput(input_value.X)
-            self.AddControllerPitchInput(input_value.Y * -1.0)  # 反转Y轴
-    
-    def _on_jump(self, value):
-        self.Jump()
-    
-    def _on_fire(self, value):
-        if self.weapon:
-            self.weapon.fire()
-            
     @ue.ufunction(override=True)
     def ReceiveTick(self, DeltaSeconds):
         """接收Tick事件，相当于蓝图中的Event Tick节点"""
@@ -1578,10 +1857,6 @@ class MyCharacter(ue.Character):
         
         self.weapon = weapon
     
-    def _fire(self):
-        if self.weapon:
-            self.weapon.fire()
-    
     # 奔跑功能
     def _run_start(self):
         """开始奔跑时设置较高的移动速度"""
@@ -1600,221 +1875,94 @@ class MyCharacter(ue.Character):
         else:
             ue.LogError("无法找到CharacterMovement组件")
     
-    @ue.ufunction(BlueprintCallable=True, Category="Ammunition")
-    def _reload_weapon(self):
-        """换弹功能 - 按R键触发"""
-        ue.LogWarning(f"[武器] 换弹功能被调用")
+    def _reset_state(self, state_type="general"):
+        """统一的状态重置函数，替代多个重复的状态重置函数
         
-        # 检查是否有武器
-        if not hasattr(self, 'weapon') or self.weapon is None:
-            ue.LogWarning("[武器] 没有装备武器，无法换弹")
-            return
-        
-        # 检查是否已经在换弹
-        if hasattr(self, '_is_reloading') and self._is_reloading:
-            ue.LogWarning("[武器] 正在换弹中，请等待...")
-            return
-            
-        # 检查是否正在攻击，如果在攻击过程中则不允许换弹
-        if self.AttackState:
-            ue.LogWarning("[武器] 正在攻击中，无法换弹")
-            return
-            
-        # 获取当前弹药数
-        current_weapon_ammo = self.WeaopnBulletNumber
-        current_total_ammo = self.AllBulletNumber
-        
-        # 计算需要补充的弹药数量
-        max_weapon_capacity = 20
-        ammo_needed = max_weapon_capacity - current_weapon_ammo
-        
-        if ammo_needed <= 0:
-            ue.LogWarning("[武器] 弹匣已满，无需换弹")
-            return
-        
-        # 记录换弹前状态
-        ue.LogWarning(f"[武器] 开始换弹 - 当前弹匣: {current_weapon_ammo}/{max_weapon_capacity}, 剩余弹药: {current_total_ammo}")
-        
-        # 标记正在换弹状态
-        self._is_reloading = True
-        
-        # 保存当前弹药状态，供动画结束后的回调使用
-        self._reload_data = {
-            'current_weapon_ammo': current_weapon_ammo,
-            'current_total_ammo': current_total_ammo,
-            'max_weapon_capacity': max_weapon_capacity,
-            'ammo_needed': ammo_needed,
-            'reload_start_time': ue.GetTimeSeconds(self.GetWorld()) if hasattr(ue, 'GetTimeSeconds') else None
-        }
-        
-        # 播放换弹动画
+        Args:
+            state_type: 状态类型，可以是 "attack", "reload" 或其他
+        """
         try:
-            # 获取换弹动画蒙太奇
-            reload_montage = ue.LoadObject(ue.AnimMontage, '/Game/Mannequin/Animations/My_Reload_Rifle_Hip1_Montage.My_Reload_Rifle_Hip1_Montage')
-            if reload_montage and hasattr(self, 'Mesh'):
-                # 获取动画实例
+            # 根据状态类型设置不同的重置逻辑
+            if state_type == "attack":
+                # 获取攻击状态前的值，用于日志
+                prev_state = self.AttackState
+                
+                # 安全地重置攻击状态
+                self.AttackState = False
+                self.LockOrientation = False
+                
+                state_name = "攻击"
+                prev_state_value = prev_state
+                new_state_value = self.AttackState
+            
+            elif state_type == "reload":
+                # 获取换弹状态前的值，用于日志
+                prev_state = getattr(self, '_is_reloading', False)
+                
+                # 安全地重置换弹状态
+                self._is_reloading = False
+                self.LockOrientation = False
+                
+                state_name = "换弹"
+                prev_state_value = prev_state
+                new_state_value = self._is_reloading
+                
+            else:
+                # 通用状态重置
+                self.AttackState = False
+                self.LockOrientation = False
+                if hasattr(self, '_is_reloading'):
+                    self._is_reloading = False
+                
+                state_name = "通用"
+                prev_state_value = True  # 假设之前是活动状态
+                new_state_value = False
+            
+            # 确保角色回到待机状态
+            if self.Mesh:
+                # 停止所有当前正在播放的蒙太奇
                 anim_instance = self.Mesh.GetAnimInstance()
                 if anim_instance:
-                    # 设置播放参数
-                    play_rate = 1.0
-                    start_section_name = ""  # 可指定从特定Section开始播放
+                    # 如果当前有蒙太奇在播放，停止它
+                    if hasattr(anim_instance, 'Montage_Stop'):
+                        # 使用短暂的混合时间平滑过渡
+                        blend_out_time = 0.25
+                        anim_instance.Montage_Stop(blend_out_time)
+                        ue.LogWarning(f"[动画] 停止所有蒙太奇，混合时间: {blend_out_time}秒")
                     
-                    # 播放动画蒙太奇并获取持续时间
-                    montage_length = anim_instance.Montage_Play(reload_montage, play_rate)
-                    
-                    if montage_length > 0:
-                        # 记录蒙太奇信息
-                        montage_name = reload_montage.GetName() if hasattr(reload_montage, 'GetName') else "换弹蒙太奇"
-                        ue.LogWarning(f"[动画] 开始播放{montage_name}，持续时间: {montage_length}秒，播放速率: {play_rate}")
-                        
-                        # 获取蒙太奇部分信息
-                        if hasattr(reload_montage, 'GetSectionName'):
-                            num_sections = reload_montage.GetNumSections() if hasattr(reload_montage, 'GetNumSections') else 0
-                            ue.LogWarning(f"[动画] 蒙太奇包含 {num_sections} 个部分")
-                            
-                            # 输出各部分的名称
-                            for i in range(num_sections):
-                                section_name = reload_montage.GetSectionName(i)
-                                ue.LogWarning(f"[动画] 蒙太奇部分 {i}: {section_name}")
-                        
-                        # 注册各种蒙太奇回调
-                        # 1. 混出回调
-                        if hasattr(anim_instance, 'OnMontageBlendingOut'):
-                            # 先移除可能存在的旧回调
-                            if hasattr(self, '_reload_blend_out_delegate'):
-                                anim_instance.OnMontageBlendingOut.Remove(self._reload_blend_out_delegate)
-                            
-                            # 创建并注册新回调
-                            def on_reload_blend_out(montage, interrupted):
-                                montage_name = montage.GetName() if hasattr(montage, 'GetName') else "换弹蒙太奇"
-                                ue.LogWarning(f"[动画回调] 换弹动画 {montage_name} 混出，中断状态: {interrupted}")
-                                self._finish_reload()
-                            
-                            self._reload_blend_out_delegate = on_reload_blend_out
-                            anim_instance.OnMontageBlendingOut.Add(self._reload_blend_out_delegate)
-                            ue.LogWarning("[动画] 已注册换弹动画混出回调")
-                        
-                        # 2. 结束回调
-                        if hasattr(anim_instance, 'OnMontageEnded'):
-                            # 先移除可能存在的旧回调
-                            if hasattr(self, '_reload_ended_delegate'):
-                                anim_instance.OnMontageEnded.Remove(self._reload_ended_delegate)
-                            
-                            # 创建并注册新回调
-                            def on_reload_ended(montage, interrupted):
-                                montage_name = montage.GetName() if hasattr(montage, 'GetName') else "换弹蒙太奇"
-                                ue.LogWarning(f"[动画回调] 换弹动画 {montage_name} 结束，中断状态: {interrupted}")
-                                
-                                # 如果是通过OnMontageEnded才执行的换弹，确保执行换弹逻辑
-                                if self._is_reloading and not hasattr(self, 'reload_completed'):
-                                    self._finish_reload()
-                            
-                            self._reload_ended_delegate = on_reload_ended
-                            anim_instance.OnMontageEnded.Add(self._reload_ended_delegate)
-                            ue.LogWarning("[动画] 已注册换弹动画结束回调")
-                        
-                        # 3. 使用定时器作为额外保障
-                        try:
-                            import threading
-                            # 使用动画长度作为定时器时间，增加额外的时间作为安全边界
-                            animation_time = montage_length + 0.5
-                            
-                            # 定义定时器回调
-                            def timer_safety_check():
-                                if self._is_reloading:
-                                    ue.LogWarning("[动画] 安全定时器触发，检查换弹状态")
-                                    # 如果仍在换弹状态，通过定时器确保完成换弹
-                                    self._finish_reload()
-                            
-                            # 创建并启动定时器
-                            self._reload_timer = threading.Timer(animation_time, timer_safety_check)
-                            self._reload_timer.start()
-                            ue.LogWarning(f"[动画] 设置换弹安全定时器，将在{animation_time}秒后检查换弹状态")
-                            
-                            return
-                        except Exception as timer_ex:
-                            ue.LogError(f"[动画] 设置换弹定时器失败: {str(timer_ex)}")
-                    else:
-                        ue.LogError(f"[动画] 换弹动画蒙太奇播放失败，返回长度: {montage_length}")
-                else:
-                    ue.LogWarning("[动画] 无法获取角色的动画实例，无法播放换弹动画")
-            else:
-                ue.LogWarning("[动画] 无法加载换弹动画蒙太奇或角色网格体不可用")
+                    # 可选：重置动画蓝图状态机变量
+                    if hasattr(anim_instance, 'SetVariableByName'):
+                        # 重置所有可能影响待机状态的变量
+                        anim_instance.SetVariableByName('bIsFalling', False)
+                        anim_instance.SetVariableByName('bIsAttacking', False)
+                        anim_instance.SetVariableByName('bIsInAir', False)
+                        ue.LogWarning("[动画] 重置动画蓝图状态机变量")
             
-            # 如果到达这里，意味着动画播放失败，直接完成换弹
-            self._finish_reload()
-            
+            ue.LogWarning(f"[状态] 重置{state_name}状态: 从 {prev_state_value} 变为 {new_state_value}")
+        
         except Exception as e:
+            # 捕获所有可能的异常，确保不会崩溃
             import traceback
-            ue.LogError(f"[动画] 播放换弹动画失败: {str(e)}")
+            ue.LogError(f"[动画] 重置{state_name if 'state_name' in locals() else ''}状态时发生错误: {str(e)}")
             ue.LogError(traceback.format_exc())
-            # 出错时也完成换弹，保证功能可用
-            self._finish_reload()
-    
-    def _finish_reload(self):
-        """在换弹动画结束后执行实际的换弹逻辑"""
-        try:
-            # 避免重复执行换弹逻辑
-            if hasattr(self, 'reload_completed') and self.reload_completed:
-                ue.LogWarning("[武器] 换弹已完成，跳过重复执行")
-                return
-                
-            # 标记已完成，防止重复调用
-            self.reload_completed = True
             
-            # 获取之前保存的弹药数据
-            if not hasattr(self, '_reload_data'):
-                ue.LogError("[武器] 换弹数据丢失，无法完成换弹")
-                self._is_reloading = False
-                return
-                
-            # 计算换弹耗时
-            reload_duration = 0
-            if (self._reload_data.get('reload_start_time') is not None and
-                hasattr(ue, 'GetTimeSeconds')):
-                reload_duration = ue.GetTimeSeconds(self.GetWorld()) - self._reload_data['reload_start_time']
-                
-            data = self._reload_data
-            current_total_ammo = self.AllBulletNumber  # 使用当前值，以防在动画播放期间有变化
-            ammo_needed = data['ammo_needed']
-            max_weapon_capacity = data['max_weapon_capacity']
-            prev_weapon_ammo = self.WeaopnBulletNumber
-            
-            # 检查总弹药是否足够
-            if current_total_ammo >= ammo_needed:
-                # 总弹药充足，补充到最大容量
-                old_total = self.AllBulletNumber
-                self.AllBulletNumber -= ammo_needed
-                self.WeaopnBulletNumber = max_weapon_capacity
-                ue.LogWarning(f"[武器] 换弹完成({reload_duration:.2f}秒)：总弹药{old_total}→{self.AllBulletNumber}，弹匣{prev_weapon_ammo}→{self.WeaopnBulletNumber}")
-            else:
-                # 总弹药不足，将所有剩余弹药装入武器
-                old_total = self.AllBulletNumber
-                self.WeaopnBulletNumber += current_total_ammo
-                self.AllBulletNumber = 0
-                ue.LogWarning(f"[武器] 弹药不足({reload_duration:.2f}秒)：总弹药{old_total}→{self.AllBulletNumber}，弹匣{prev_weapon_ammo}→{self.WeaopnBulletNumber}")
-        except Exception as e:
-            import traceback
-            ue.LogError(f"[武器] 执行换弹逻辑时出错: {str(e)}")
-            ue.LogError(traceback.format_exc())
-        finally:
-            # 无论如何，重置换弹状态
-            self._is_reloading = False
-            # 清理临时数据
-            if hasattr(self, '_reload_data'):
-
-                del self._reload_data
-            
-            # 延迟清理reload_completed标记，确保短时间内不会重复执行
+            # 尝试最基本的重置以防止卡住
             try:
-                import threading
-                def clear_completed_flag():
-                    if hasattr(self, 'reload_completed'):
-                        delattr(self, 'reload_completed')
-                        ue.LogWarning("[武器] 换弹完成标记已清理，可以进行下一次换弹")
-                
-                threading.Timer(0.5, clear_completed_flag).start()
+                self.AttackState = False
+                self.LockOrientation = False
+                if hasattr(self, '_is_reloading'):
+                    self._is_reloading = False
             except:
-                # 如果设置定时器失败，直接清理
-                if hasattr(self, 'reload_completed'):
-                    delattr(self, 'reload_completed')
+                pass
+    
+    def _reset_reload_state(self):
+        """重置换弹相关状态 - 保持兼容性的包装函数"""
+        self._reset_state("reload")
+    
+    def _reset_attack_state(self, *args):
+        """重置攻击相关状态并确保角色回到待机状态 - 保持兼容性的包装函数
+        
+        参数:
+            *args: 可变参数列表，用于接收由蒙太奇回调传递的额外参数
+        """
+        self._reset_state("attack")

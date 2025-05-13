@@ -47,3 +47,93 @@ C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\character.p
 同理，对于攻击，播放攻击动画蒙太奇的时候，不允许运行换弹操作（可扩展）；
 
 要求在按住shift加速跑的时候，不允许攻击，但是可以换弹
+
+蓝图资源放在了C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\Content\ThirdPersonCPP\Blueprints
+动画蓝图资源放在了C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\Content\Mannequin\Animations
+参考C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\Plugins\NePythonBinding\Tools\pystubs\ue\__init__.pyi
+要求把现在的播放动画序列改为播放动画蒙太奇：
+C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\Content\Mannequin\Animations\My_Fire_Rifle_Hip_Montage.uasset
+C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\Content\Mannequin\Animations\My_Reload_Rifle_Hip_Montage.uasset
+将动画蒙太奇播放的骨骼对象选择为：
+Begin Object Class=/Script/Engine.SkeletalMeshComponent Name="CharacterMesh0" ExportPath="/Script/Engine.SkeletalMeshComponent'/Engine/Transient.CharacterMesh0'"
+   AnimClass="/Script/Engine.AnimBlueprintGeneratedClass'/Game/ThirdPersonCPP/Blueprints/AnimeBP/MyCharacterAnimBlueprint.MyCharacterAnimBlueprint_C'"
+   SkeletalMesh="/Script/Engine.SkeletalMesh'/Game/Mannequin/Character/Mesh/SK_Mannequin.SK_Mannequin'"
+   SkinnedAsset="/Script/Engine.SkeletalMesh'/Game/Mannequin/Character/Mesh/SK_Mannequin.SK_Mannequin'"
+   VisibilityBasedAnimTickOption=AlwaysTickPose
+   BodyInstance=(ObjectType=ECC_Pawn,CollisionEnabled=QueryOnly,CollisionProfileName="CharacterMesh",CollisionResponses=(ResponseArray=((Channel="Pawn",Response=ECR_Ignore),(Channel="Visibility",Response=ECR_Ignore),(Channel="Vehicle",Response=ECR_Ignore))))
+   RelativeLocation=(X=0.000000,Y=0.000000,Z=-88.000000)
+   RelativeRotation=(Pitch=0.000000,Yaw=-90.000000,Roll=0.000000)
+End Object
+
+目前代码中存在大量重名函数、一部分被定义了却没被用到、旧的函数，移除这些函数和代码
+
+
+UE客户端日志：
+[动画] 使用网格体播放换弹动画: {'PathName': '/Game/ThirdPersonCPP/Maps/UEDPIE_0_关卡1.关卡1:PersistentLevel.MyCharacterBP_C_0.CharacterMesh0', 'SkeletalMesh': 'SK_Mannequin', 'AnimClass': '/Game/ThirdPersonCPP/Blueprints/AnimeBP/MyCharacterAnimBlueprint.MyCharacterAnimBlueprint_C'}
+播放蒙太奇的anim_instance:<MyCharacterAnimBlueprint_C 'MyCharacterAnimBlueprint_C_0' at 0x00000B420F250000>
+[动画] 动画实例类型: MyCharacterAnimBlueprint_C
+[动画] 开始播放换弹动画蒙太奇: My_Reload_Rifle_Hip_Montage
+[动画] 换弹动画蒙太奇播放成功，持续时间: 2.1666667461395264秒，播放速率: 1.0
+[动画] 换弹动画起始位置: 0.0，总长度: 2.1666667461395264
+[动画清理] 已清理所有蒙太奇回调
+[动画] 已注册reload蒙太奇混出回调
+[动画] 已注册reload蒙太奇结束回调
+[动画] 已注册reload蒙太奇开始回调
+[动画回调] reload蒙太奇混出: My_Reload_Rifle_Hip_Montage, 中断状态: False
+换弹完成! 当前武器弹药: 30/30, 剩余备用弹药: 92
+[动画] 停止所有蒙太奇，混合时间: 0.25秒
+[状态] 重置换弹状态: 从 True 变为 False
+[动画回调] reload蒙太奇结束: My_Reload_Rifle_Hip_Montage, 中断状态: False
+[动画清理] 已清理所有蒙太奇回调
+
+上述我尝试播放动画蒙太奇，但是我的网格体并没有做出对应动画，我认为是网格体配置有问题，我在蓝图中的网格体为：
+Begin Object Class=/Script/Engine.SkeletalMeshComponent Name="CharacterMesh0" ExportPath="/Script/Engine.SkeletalMeshComponent'/Engine/Transient.CharacterMesh0'"
+   AnimClass="/Script/Engine.AnimBlueprintGeneratedClass'/Game/ThirdPersonCPP/Blueprints/AnimeBP/MyCharacterAnimBlueprint.MyCharacterAnimBlueprint_C'"
+   SkeletalMesh="/Script/Engine.SkeletalMesh'/Game/Mannequin/Character/Mesh/SK_Mannequin.SK_Mannequin'"
+   SkinnedAsset="/Script/Engine.SkeletalMesh'/Game/Mannequin/Character/Mesh/SK_Mannequin.SK_Mannequin'"
+   VisibilityBasedAnimTickOption=AlwaysTickPose
+   BodyInstance=(ObjectType=ECC_Pawn,CollisionEnabled=QueryOnly,CollisionProfileName="CharacterMesh",CollisionResponses=(ResponseArray=((Channel="Pawn",Response=ECR_Ignore),(Channel="Visibility",Response=ECR_Ignore),(Channel="Vehicle",Response=ECR_Ignore))))
+   RelativeLocation=(X=0.000000,Y=0.000000,Z=-88.000000)
+   RelativeRotation=(Pitch=0.000000,Yaw=-90.000000,Roll=0.000000)
+End Object
+
+拖拽出来得到：
+Begin Object Class=/Script/BlueprintGraph.K2Node_VariableGet Name="K2Node_VariableGet_0" ExportPath="/Script/BlueprintGraph.K2Node_VariableGet'/Game/ThirdPersonCPP/Blueprints/MyCharacterBP.MyCharacterBP:EventGraph.K2Node_VariableGet_0'"
+   VariableReference=(MemberName="Mesh",bSelfContext=True)
+   NodePosX=288
+   NodePosY=1216
+   NodeGuid=ED587A7A40FA8B3E778CFB82665AE26C
+   CustomProperties Pin (PinId=D00D6A174860DAFE4E999D8B6A6DCF96,PinName="Mesh",PinFriendlyName=NSLOCTEXT("UObjectDisplayNames", "Character:Mesh", "Mesh"),Direction="EGPD_Output",PinType.PinCategory="object",PinType.PinSubCategory="",PinType.PinSubCategoryObject="/Script/CoreUObject.Class'/Script/Engine.SkeletalMeshComponent'",PinType.PinSubCategoryMemberReference=(),PinType.PinValueType=(),PinType.ContainerType=None,PinType.bIsReference=False,PinType.bIsConst=False,PinType.bIsWeakPointer=False,PinType.bIsUObjectWrapper=True,PinType.bSerializeAsSinglePrecisionFloat=False,PersistentGuid=00000000000000000000000000000000,bHidden=False,bNotConnectable=False,bDefaultValueIsReadOnly=False,bDefaultValueIsIgnored=False,bAdvancedView=False,bOrphanedPin=False,)
+   CustomProperties Pin (PinId=17DDC70943D77A9D7CFB4B97E763C20F,PinName="self",PinFriendlyName=NSLOCTEXT("K2Node", "Target", "Target"),PinType.PinCategory="object",PinType.PinSubCategory="",PinType.PinSubCategoryObject="/Script/CoreUObject.Class'/Script/Engine.Character'",PinType.PinSubCategoryMemberReference=(),PinType.PinValueType=(),PinType.ContainerType=None,PinType.bIsReference=False,PinType.bIsConst=False,PinType.bIsWeakPointer=False,PinType.bIsUObjectWrapper=False,PinType.bSerializeAsSinglePrecisionFloat=False,PersistentGuid=00000000000000000000000000000000,bHidden=True,bNotConnectable=False,bDefaultValueIsReadOnly=False,bDefaultValueIsIgnored=False,bAdvancedView=False,bOrphanedPin=False,)
+End Object
+
+正确的播放蒙太奇应该是下面的蓝图逻辑：
+
+Begin Object Class=/Script/BlueprintGraph.K2Node_VariableGet Name="K2Node_VariableGet_7" ExportPath="/Script/BlueprintGraph.K2Node_VariableGet'/Game/ThirdPersonCPP/Blueprints/MyCharacterBP.MyCharacterBP:EventGraph.K2Node_VariableGet_7'"
+   VariableReference=(MemberName="Mesh",bSelfContext=True)
+   NodePosX=928
+   NodePosY=1088
+   NodeGuid=7738EE4747C7F7205D2AC6A5CC2114D3
+   CustomProperties Pin (PinId=332E74C54D4D1C41FD4561B4B0EB1BC3,PinName="Mesh",PinFriendlyName=NSLOCTEXT("UObjectDisplayNames", "Character:Mesh", "Mesh"),Direction="EGPD_Output",PinType.PinCategory="object",PinType.PinSubCategory="",PinType.PinSubCategoryObject="/Script/CoreUObject.Class'/Script/Engine.SkeletalMeshComponent'",PinType.PinSubCategoryMemberReference=(),PinType.PinValueType=(),PinType.ContainerType=None,PinType.bIsReference=False,PinType.bIsConst=False,PinType.bIsWeakPointer=False,PinType.bIsUObjectWrapper=True,PinType.bSerializeAsSinglePrecisionFloat=False,LinkedTo=(K2Node_PlayMontage_1 26E44B39462E4A95B0DD14967382B6FE,),PersistentGuid=00000000000000000000000000000000,bHidden=False,bNotConnectable=False,bDefaultValueIsReadOnly=False,bDefaultValueIsIgnored=False,bAdvancedView=False,bOrphanedPin=False,)
+   CustomProperties Pin (PinId=C1EE27E54CE1AD4E5A31ED95ADE95C1E,PinName="self",PinFriendlyName=NSLOCTEXT("K2Node", "Target", "Target"),PinType.PinCategory="object",PinType.PinSubCategory="",PinType.PinSubCategoryObject="/Script/CoreUObject.Class'/Script/Engine.Character'",PinType.PinSubCategoryMemberReference=(),PinType.PinValueType=(),PinType.ContainerType=None,PinType.bIsReference=False,PinType.bIsConst=False,PinType.bIsWeakPointer=False,PinType.bIsUObjectWrapper=False,PinType.bSerializeAsSinglePrecisionFloat=False,PersistentGuid=00000000000000000000000000000000,bHidden=True,bNotConnectable=False,bDefaultValueIsReadOnly=False,bDefaultValueIsIgnored=False,bAdvancedView=False,bOrphanedPin=False,)
+End Object
+Begin Object Class=/Script/AnimGraph.K2Node_PlayMontage Name="K2Node_PlayMontage_1" ExportPath="/Script/AnimGraph.K2Node_PlayMontage'/Game/ThirdPersonCPP/Blueprints/MyCharacterBP.MyCharacterBP:EventGraph.K2Node_PlayMontage_1'"
+   NodePosX=1168
+   NodePosY=1008
+   NodeGuid=23577FF845B8FD69463E39AAF3DD81F9
+   CustomProperties Pin (PinId=8C9E4F654A2A5F4D4DAEA781CCBF9C9A,PinName="execute",PinToolTip="\n执行",PinType.PinCategory="exec",PinType.PinSubCategory="",PinType.PinSubCategoryObject=None,PinType.PinSubCategoryMemberReference=(),PinType.PinValueType=(),PinType.ContainerType=None,PinType.bIsReference=False,PinType.bIsConst=False,PinType.bIsWeakPointer=False,PinType.bIsUObjectWrapper=False,PinType.bSerializeAsSinglePrecisionFloat=False,LinkedTo=(K2Node_IfThenElse_2 4790CD214FE5D10AD3B17F90B4E4B145,),PersistentGuid=00000000000000000000000000000000,bHidden=False,bNotConnectable=False,bDefaultValueIsReadOnly=False,bDefaultValueIsIgnored=False,bAdvancedView=False,bOrphanedPin=False,)
+   CustomProperties Pin (PinId=C0AB9CA64CE3F3F9C7BC83809F4FCE94,PinName="then",Direction="EGPD_Output",PinType.PinCategory="exec",PinType.PinSubCategory="",PinType.PinSubCategoryObject=None,PinType.PinSubCategoryMemberReference=(),PinType.PinValueType=(),PinType.ContainerType=None,PinType.bIsReference=False,PinType.bIsConst=False,PinType.bIsWeakPointer=False,PinType.bIsUObjectWrapper=False,PinType.bSerializeAsSinglePrecisionFloat=False,PersistentGuid=00000000000000000000000000000000,bHidden=False,bNotConnectable=False,bDefaultValueIsReadOnly=False,bDefaultValueIsIgnored=False,bAdvancedView=False,bOrphanedPin=False,)
+   CustomProperties Pin (PinId=F5CA426B46CC8A21CFF3078471BB0343,PinName="OnCompleted",PinFriendlyName=NSLOCTEXT("UObjectDisplayNames", "PlayMontageCallbackProxy:OnCompleted", "On Completed"),PinToolTip="蒙太奇完成播放且未中断时调用",Direction="EGPD_Output",PinType.PinCategory="exec",PinType.PinSubCategory="",PinType.PinSubCategoryObject=None,PinType.PinSubCategoryMemberReference=(),PinType.PinValueType=(),PinType.ContainerType=None,PinType.bIsReference=False,PinType.bIsConst=False,PinType.bIsWeakPointer=False,PinType.bIsUObjectWrapper=False,PinType.bSerializeAsSinglePrecisionFloat=False,PersistentGuid=00000000000000000000000000000000,bHidden=False,bNotConnectable=False,bDefaultValueIsReadOnly=False,bDefaultValueIsIgnored=False,bAdvancedView=False,bOrphanedPin=False,)
+   CustomProperties Pin (PinId=E03AF1D942E615991B50E880B922FF4C,PinName="OnBlendOut",PinFriendlyName=NSLOCTEXT("UObjectDisplayNames", "PlayMontageCallbackProxy:OnBlendOut", "On Blend Out"),PinToolTip="在蒙太奇开始混出且未中断时调用",Direction="EGPD_Output",PinType.PinCategory="exec",PinType.PinSubCategory="",PinType.PinSubCategoryObject=None,PinType.PinSubCategoryMemberReference=(),PinType.PinValueType=(),PinType.ContainerType=None,PinType.bIsReference=False,PinType.bIsConst=False,PinType.bIsWeakPointer=False,PinType.bIsUObjectWrapper=False,PinType.bSerializeAsSinglePrecisionFloat=False,PersistentGuid=00000000000000000000000000000000,bHidden=False,bNotConnectable=False,bDefaultValueIsReadOnly=False,bDefaultValueIsIgnored=False,bAdvancedView=False,bOrphanedPin=False,)
+   CustomProperties Pin (PinId=0D5EFF0141A1450C0946B482AB47F9FD,PinName="OnInterrupted",PinFriendlyName=NSLOCTEXT("UObjectDisplayNames", "PlayMontageCallbackProxy:OnInterrupted", "On Interrupted"),PinToolTip="蒙太奇已中断时调用（或播放失败）",Direction="EGPD_Output",PinType.PinCategory="exec",PinType.PinSubCategory="",PinType.PinSubCategoryObject=None,PinType.PinSubCategoryMemberReference=(),PinType.PinValueType=(),PinType.ContainerType=None,PinType.bIsReference=False,PinType.bIsConst=False,PinType.bIsWeakPointer=False,PinType.bIsUObjectWrapper=False,PinType.bSerializeAsSinglePrecisionFloat=False,PersistentGuid=00000000000000000000000000000000,bHidden=False,bNotConnectable=False,bDefaultValueIsReadOnly=False,bDefaultValueIsIgnored=False,bAdvancedView=False,bOrphanedPin=False,)
+   CustomProperties Pin (PinId=C8807F9A48C8728F7676D7BDDD847ACE,PinName="OnNotifyBegin",PinFriendlyName=NSLOCTEXT("UObjectDisplayNames", "PlayMontageCallbackProxy:OnNotifyBegin", "On Notify Begin"),Direction="EGPD_Output",PinType.PinCategory="exec",PinType.PinSubCategory="",PinType.PinSubCategoryObject=None,PinType.PinSubCategoryMemberReference=(),PinType.PinValueType=(),PinType.ContainerType=None,PinType.bIsReference=False,PinType.bIsConst=False,PinType.bIsWeakPointer=False,PinType.bIsUObjectWrapper=False,PinType.bSerializeAsSinglePrecisionFloat=False,PersistentGuid=00000000000000000000000000000000,bHidden=False,bNotConnectable=False,bDefaultValueIsReadOnly=False,bDefaultValueIsIgnored=False,bAdvancedView=False,bOrphanedPin=False,)
+   CustomProperties Pin (PinId=EE29CC5C466A6605EEB83899DD07C4C3,PinName="OnNotifyEnd",PinFriendlyName=NSLOCTEXT("UObjectDisplayNames", "PlayMontageCallbackProxy:OnNotifyEnd", "On Notify End"),Direction="EGPD_Output",PinType.PinCategory="exec",PinType.PinSubCategory="",PinType.PinSubCategoryObject=None,PinType.PinSubCategoryMemberReference=(),PinType.PinValueType=(),PinType.ContainerType=None,PinType.bIsReference=False,PinType.bIsConst=False,PinType.bIsWeakPointer=False,PinType.bIsUObjectWrapper=False,PinType.bSerializeAsSinglePrecisionFloat=False,PersistentGuid=00000000000000000000000000000000,bHidden=False,bNotConnectable=False,bDefaultValueIsReadOnly=False,bDefaultValueIsIgnored=False,bAdvancedView=False,bOrphanedPin=False,)
+   CustomProperties Pin (PinId=939BEA8743E1C2E922616094A7A5B1E6,PinName="NotifyName",PinToolTip="Notify Name\n命名",Direction="EGPD_Output",PinType.PinCategory="name",PinType.PinSubCategory="",PinType.PinSubCategoryObject=None,PinType.PinSubCategoryMemberReference=(),PinType.PinValueType=(),PinType.ContainerType=None,PinType.bIsReference=False,PinType.bIsConst=False,PinType.bIsWeakPointer=False,PinType.bIsUObjectWrapper=False,PinType.bSerializeAsSinglePrecisionFloat=False,PersistentGuid=00000000000000000000000000000000,bHidden=False,bNotConnectable=False,bDefaultValueIsReadOnly=False,bDefaultValueIsIgnored=False,bAdvancedView=False,bOrphanedPin=False,)
+   CustomProperties Pin (PinId=26E44B39462E4A95B0DD14967382B6FE,PinName="InSkeletalMeshComponent",PinToolTip="In Skeletal Mesh Component\n骨骼网格体组件 对象引用",PinType.PinCategory="object",PinType.PinSubCategory="",PinType.PinSubCategoryObject="/Script/CoreUObject.Class'/Script/Engine.SkeletalMeshComponent'",PinType.PinSubCategoryMemberReference=(),PinType.PinValueType=(),PinType.ContainerType=None,PinType.bIsReference=False,PinType.bIsConst=False,PinType.bIsWeakPointer=False,PinType.bIsUObjectWrapper=False,PinType.bSerializeAsSinglePrecisionFloat=False,LinkedTo=(K2Node_VariableGet_7 332E74C54D4D1C41FD4561B4B0EB1BC3,),PersistentGuid=00000000000000000000000000000000,bHidden=False,bNotConnectable=False,bDefaultValueIsReadOnly=False,bDefaultValueIsIgnored=False,bAdvancedView=False,bOrphanedPin=False,)
+   CustomProperties Pin (PinId=F24D9FE74C96A825ED5D5D9564254879,PinName="MontageToPlay",PinToolTip="Montage to Play\n动画蒙太奇 对象引用",PinType.PinCategory="object",PinType.PinSubCategory="",PinType.PinSubCategoryObject="/Script/CoreUObject.Class'/Script/Engine.AnimMontage'",PinType.PinSubCategoryMemberReference=(),PinType.PinValueType=(),PinType.ContainerType=None,PinType.bIsReference=False,PinType.bIsConst=False,PinType.bIsWeakPointer=False,PinType.bIsUObjectWrapper=False,PinType.bSerializeAsSinglePrecisionFloat=False,DefaultObject="/Game/Mannequin/Animations/My_Hit_React_4_Montage.My_Hit_React_4_Montage",PersistentGuid=00000000000000000000000000000000,bHidden=False,bNotConnectable=False,bDefaultValueIsReadOnly=False,bDefaultValueIsIgnored=False,bAdvancedView=False,bOrphanedPin=False,)
+   CustomProperties Pin (PinId=7F6699674A894D4C7B7AD8AE65E83F53,PinName="PlayRate",PinToolTip="Play Rate\n浮点（单精度）",PinType.PinCategory="real",PinType.PinSubCategory="float",PinType.PinSubCategoryObject=None,PinType.PinSubCategoryMemberReference=(),PinType.PinValueType=(),PinType.ContainerType=None,PinType.bIsReference=False,PinType.bIsConst=False,PinType.bIsWeakPointer=False,PinType.bIsUObjectWrapper=False,PinType.bSerializeAsSinglePrecisionFloat=False,DefaultValue="1.000000",AutogeneratedDefaultValue="1.000000",PersistentGuid=00000000000000000000000000000000,bHidden=False,bNotConnectable=False,bDefaultValueIsReadOnly=False,bDefaultValueIsIgnored=False,bAdvancedView=False,bOrphanedPin=False,)
+   CustomProperties Pin (PinId=2F297F5244EB56E387A069B7B8327E06,PinName="StartingPosition",PinToolTip="Starting Position\n浮点（单精度）",PinType.PinCategory="real",PinType.PinSubCategory="float",PinType.PinSubCategoryObject=None,PinType.PinSubCategoryMemberReference=(),PinType.PinValueType=(),PinType.ContainerType=None,PinType.bIsReference=False,PinType.bIsConst=False,PinType.bIsWeakPointer=False,PinType.bIsUObjectWrapper=False,PinType.bSerializeAsSinglePrecisionFloat=False,DefaultValue="0.000000",AutogeneratedDefaultValue="0.000000",PersistentGuid=00000000000000000000000000000000,bHidden=False,bNotConnectable=False,bDefaultValueIsReadOnly=False,bDefaultValueIsIgnored=False,bAdvancedView=False,bOrphanedPin=False,)
+   CustomProperties Pin (PinId=B5D83E9141AAFCFED4C52D80B9EEDB0F,PinName="StartingSection",PinToolTip="Starting Section\n命名",PinType.PinCategory="name",PinType.PinSubCategory="",PinType.PinSubCategoryObject=None,PinType.PinSubCategoryMemberReference=(),PinType.PinValueType=(),PinType.ContainerType=None,PinType.bIsReference=False,PinType.bIsConst=False,PinType.bIsWeakPointer=False,PinType.bIsUObjectWrapper=False,PinType.bSerializeAsSinglePrecisionFloat=False,DefaultValue="None",AutogeneratedDefaultValue="None",PersistentGuid=00000000000000000000000000000000,bHidden=False,bNotConnectable=False,bDefaultValueIsReadOnly=False,bDefaultValueIsIgnored=False,bAdvancedView=False,bOrphanedPin=False,)
+End Object
+
+参考C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\Plugins\NePythonBinding\Tools\pystubs\ue\__init__.pyi，修正现在的代码网格体动画蒙太奇播放，要将动画蒙太奇在正确的网格体上进行播放。
