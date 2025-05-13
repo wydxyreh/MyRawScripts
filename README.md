@@ -41,3 +41,7 @@ C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\ue_site.py
 保存的数据为MyCharacter中的变量值，比如AllBulletNumber、WeaopnBulletNumber
 
 结合 C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\Plugins\NePythonBinding\Tools\pystubs\ue\__init__.pyi 分析并修复上述问题
+
+C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\character.py
+对于换弹操作，按下R键开始换弹，然后播放对应的换弹动画蒙太奇，播放完换弹动画之后，才将弹药进行换弹。
+以及换弹过程中，不允许进行左键攻击

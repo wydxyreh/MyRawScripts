@@ -1377,6 +1377,11 @@ class MyCharacter(ue.Character):
             ue.LogWarning("没有装备武器，无法换弹")
             return
         
+        # 检查是否已经在换弹
+        if hasattr(self, '_is_reloading') and self._is_reloading:
+            ue.LogWarning("正在换弹中，请等待...")
+            return
+            
         # 获取当前弹药数
         current_weapon_ammo = self.WeaopnBulletNumber
         current_total_ammo = self.AllBulletNumber
@@ -1389,7 +1394,18 @@ class MyCharacter(ue.Character):
             ue.LogWarning("弹匣已满，无需换弹")
             return
         
-        # 使用AnimBP PlayMontage功能
+        # 标记正在换弹状态
+        self._is_reloading = True
+        
+        # 保存当前弹药状态，供动画结束后的回调使用
+        self._reload_data = {
+            'current_weapon_ammo': current_weapon_ammo,
+            'current_total_ammo': current_total_ammo,
+            'max_weapon_capacity': max_weapon_capacity,
+            'ammo_needed': ammo_needed
+        }
+        
+        # 播放换弹动画
         try:
             # 获取换弹动画蒙太奇
             reload_montage = ue.LoadObject(ue.AnimMontage.Class(), 
@@ -1402,26 +1418,78 @@ class MyCharacter(ue.Character):
                     if anim_instance:
                         # 播放动画蒙太奇
                         play_rate = 1.0
-                        anim_instance.Montage_Play(reload_montage, play_rate)
-                        # 可以在这里设置动画通知回调
-                        ue.LogWarning("成功播放换弹动画蒙太奇")
+                        montage_length = anim_instance.Montage_Play(reload_montage, play_rate)
+                        
+                        # 注册动画结束回调
+                        if hasattr(anim_instance, 'OnMontageBlendingOut'):
+                            # 先移除可能存在的旧回调
+                            if hasattr(self, '_reload_blend_out_delegate'):
+                                anim_instance.OnMontageBlendingOut.Remove(self._reload_blend_out_delegate)
+                            
+                            # 创建并注册新回调
+                            def on_reload_blend_out(montage, interrupted):
+                                ue.LogWarning("换弹动画播放完毕，执行换弹逻辑")
+                                self._finish_reload()
+                            
+                            self._reload_blend_out_delegate = on_reload_blend_out
+                            anim_instance.OnMontageBlendingOut.Add(self._reload_blend_out_delegate)
+                            ue.LogWarning("成功播放换弹动画蒙太奇，已注册动画结束回调")
+                        else:
+                            # 如果没有混出回调，使用定时器
+                            try:
+                                import threading
+                                # 使用动画长度作为定时器时间，如果无法获取则使用默认时间
+                                animation_time = montage_length if montage_length > 0 else 2.0
+                                timer = threading.Timer(animation_time, self._finish_reload)
+                                timer.start()
+                                ue.LogWarning(f"成功播放换弹动画蒙太奇，将在{animation_time}秒后执行换弹逻辑")
+                            except Exception as timer_ex:
+                                ue.LogError(f"设置换弹定时器失败: {str(timer_ex)}")
+                                # 如果定时器设置失败，立即完成换弹
+                                self._finish_reload()
                     else:
-                        ue.LogWarning("无法获取角色的动画实例")
+                        ue.LogWarning("无法获取角色的动画实例，无法播放动画")
+                        self._finish_reload()
                 else:
-                    ue.LogWarning("ue模块中没有AnimInstance类")
+                    ue.LogWarning("ue模块中没有AnimInstance类，无法播放动画")
+                    self._finish_reload()
             else:
-                ue.LogWarning("无法加载换弹动画蒙太奇或角色网格体不可用")
+                ue.LogWarning("无法加载换弹动画蒙太奇或角色网格体不可用，无法播放动画")
+                self._finish_reload()
         except Exception as e:
             ue.LogError(f"播放换弹动画失败: {str(e)}")
+            # 出错时也完成换弹，保证功能可用
+            self._finish_reload()
+    
+    def _finish_reload(self):
+        """在换弹动画结束后执行实际的换弹逻辑"""
+        try:
+            # 获取之前保存的弹药数据
+            if not hasattr(self, '_reload_data'):
+                ue.LogError("换弹数据丢失，无法完成换弹")
+                self._is_reloading = False
+                return
+                
+            data = self._reload_data
+            current_total_ammo = self.AllBulletNumber  # 使用当前值，以防在动画播放期间有变化
+            ammo_needed = data['ammo_needed']
+            max_weapon_capacity = data['max_weapon_capacity']
             
-        # 检查总弹药是否足够
-        if current_total_ammo >= ammo_needed:
-            # 总弹药充足，补充到最大容量
-            self.AllBulletNumber -= ammo_needed
-            self.WeaopnBulletNumber = max_weapon_capacity
-            ue.LogWarning(f"换弹完成：消耗{ammo_needed}发弹药，弹匣装填至{self.WeaopnBulletNumber}发，剩余总弹药{self.AllBulletNumber}发")
-        else:
-            # 总弹药不足，将所有剩余弹药装入武器
-            self.WeaopnBulletNumber += current_total_ammo
-            self.AllBulletNumber = 0
-            ue.LogWarning(f"弹药不足：将剩余{current_total_ammo}发弹药全部装入，当前弹匣{self.WeaopnBulletNumber}发，总弹药已耗尽")
+            # 检查总弹药是否足够
+            if current_total_ammo >= ammo_needed:
+                # 总弹药充足，补充到最大容量
+                self.AllBulletNumber -= ammo_needed
+                self.WeaopnBulletNumber = max_weapon_capacity
+                ue.LogWarning(f"换弹完成：消耗{ammo_needed}发弹药，弹匣装填至{self.WeaopnBulletNumber}发，剩余总弹药{self.AllBulletNumber}发")
+            else:
+                # 总弹药不足，将所有剩余弹药装入武器
+                self.WeaopnBulletNumber += current_total_ammo
+                self.AllBulletNumber = 0
+                ue.LogWarning(f"弹药不足：将剩余{current_total_ammo}发弹药全部装入，当前弹匣{self.WeaopnBulletNumber}发，总弹药已耗尽")
+        except Exception as e:
+            ue.LogError(f"执行换弹逻辑时出错: {str(e)}")
+        finally:
+            # 无论如何，重置换弹状态
+            self._is_reloading = False
+            if hasattr(self, '_reload_data'):
+                del self._reload_data
