@@ -212,27 +212,6 @@ def initialize_network_client():
 	except Exception as e:
 		ue.LogError(f"[网络] 初始化网络客户端失败: {str(e)}")
 
-def _background_connect_attempts():
-	"""在后台定期尝试连接服务器的函数"""
-	global network_status
-	
-	max_attempts = 10  # 最大尝试次数
-	attempt_count = 0
-	
-	while not network_status.is_network_initialized and attempt_count < max_attempts:
-		attempt_count += 1
-		ue.LogWarning(f"[Network] 后台尝试连接服务器 (尝试 {attempt_count}/{max_attempts})...")
-		
-		if try_connect_server():
-			ue.LogWarning("[Network] 后台连接成功，网络功能现已可用")
-			return
-		
-		# 每次尝试之间等待3秒
-		time.sleep(3)
-	
-	if not network_status.is_network_initialized:
-		ue.LogError("[Network] 达到最大尝试次数，无法连接到服务器，网络功能将不可用")
-
 def try_connect_server():
 	"""尝试连接服务器
 	

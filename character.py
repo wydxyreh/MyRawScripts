@@ -505,6 +505,18 @@ class MyCharacter(ue.Character):
     @ue.ufunction(override=True)
     def ReceiveEndPlay(self, EndPlayReason):
         try:
+            ue.LogWarning('角色退出游戏，自动保存游戏数据...')
+            
+            # 自动保存游戏数据
+            try:
+                # 调用保存游戏数据的函数
+                self._save_game_data()
+                ue.LogWarning('游戏退出前自动保存完成')
+            except Exception as save_error:
+                import traceback
+                ue.LogError(f'退出游戏时自动保存失败: {str(save_error)}')
+                ue.LogError(traceback.format_exc())
+            
             # 获取动画实例
             if self.Mesh:
                 anim_instance = self.Mesh.GetAnimInstance()
@@ -514,7 +526,9 @@ class MyCharacter(ue.Character):
                         
             ue.LogWarning('角色退出游戏，已清理所有回调')
         except Exception as e:
+            import traceback
             ue.LogError(f'清理角色回调时出错: {str(e)}')
+            ue.LogError(traceback.format_exc())
     
     @ue.ufunction(override=True)
     def ReceiveBeginPlay(self):
@@ -595,14 +609,19 @@ class MyCharacter(ue.Character):
             network_status = ue_site.network_status
             ue.LogWarning(f"[自动登录] 登录前状态: {network_status.get_status_dict()}")
             
+            # 从GameInstance获取新游戏标记
+            is_new_game = my_game_instance.instance_isnewgame if hasattr(my_game_instance, 'instance_isnewgame') else False
+            ue.LogWarning(f"[自动登录] 是否为新游戏: {is_new_game}")
+            
             # 先检查是否已经登录
             # 两种方式检查登录状态: 通过network_status和通过client_entity
+            already_logged_in = False
             if network_status.auth_status["is_authenticated"]:
                 ue.LogWarning(f"[自动登录] 已经登录为用户: {network_status.auth_status['username']}，无需重复登录")
-                return True
+                already_logged_in = True
             
             # 如果有client_entity，还需要检查其认证状态
-            if (network_status.client_entity and 
+            elif (network_status.client_entity and 
                 hasattr(network_status.client_entity, 'authenticated') and 
                 network_status.client_entity.authenticated):
                 # 同步客户端状态
@@ -612,8 +631,15 @@ class MyCharacter(ue.Character):
                 # 同步token信息
                 if hasattr(network_status.client_entity, 'token'):
                     network_status.auth_status["token"] = network_status.client_entity.token
-                    
-                ue.LogWarning(f"[自动登录] 已经通过客户端实体验证为用户: {network_status.client_entity.username}，无需重复登录")
+                    ue.LogWarning(f"[自动登录] 已经通过客户端实体验证为用户: {network_status.client_entity.username}，无需重复登录")
+                    already_logged_in = True
+                
+            if already_logged_in:
+                # 用户已登录，处理玩家数据
+                ue.LogWarning("[自动登录] 用户已登录，根据是否新游戏决定处理玩家数据")
+                
+                self._handle_player_data(is_new_game)
+                my_game_instance.instance_isnewgame = False
                 return True
                 
             if network_status.auth_status["login_in_progress"]:
@@ -638,10 +664,6 @@ class MyCharacter(ue.Character):
             if not is_ready:
                 ue.LogError(f"{error_msg}，无法登录")
                 return False
-            
-            # 从GameInstance获取新游戏标记
-            is_new_game = my_game_instance.instance_isnewgame if hasattr(my_game_instance, 'instance_isnewgame') else False
-            ue.LogWarning(f"[自动登录] 是否为新游戏: {is_new_game}")
             
             # 使用账号密码登录
             ue.LogWarning(f"[自动登录] 自动登录 - 用户名: {username}")
@@ -718,8 +740,13 @@ class MyCharacter(ue.Character):
                 ue.LogWarning("[自动登录] 登录失败，打开开始地图")
                 self._disconnect_from_server()
                 self._open_start_map()
+                return False
             else:
                 ue.LogWarning(f"[自动登录] 登录成功")
+                
+                # 登录成功后，处理玩家数据
+                self._handle_player_data(is_new_game)
+                my_game_instance.instance_isnewgame = False
             
             return login_success[0]
         except ImportError:
@@ -744,6 +771,22 @@ class MyCharacter(ue.Character):
                 except Exception as ex2:
                     ue.LogError(f"[自动登录] 备用方法打开关卡也失败: {ex2}")
             return False
+
+    def _handle_player_data(self, is_new_game):
+        """
+        根据是否为新游戏来处理玩家数据
+        
+        Args:
+            is_new_game (bool): 是否为新游戏，True则初始化新数据，False则加载服务器数据
+        """
+        if is_new_game:
+            # 如果是新游戏，初始化玩家数据
+            ue.LogWarning("[自动登录] 新游戏，初始化玩家属性")
+            self._init_player_attributes()
+        else:
+            # 如果是继续游戏，加载服务器数据
+            ue.LogWarning("[自动登录] 继续游戏，从服务器加载玩家数据")
+            self._load_game_data()
 
     def _open_start_map(self):
         """打开开始地图"""
@@ -1999,12 +2042,12 @@ class MyCharacter(ue.Character):
             # 创建当前游戏状态的数据对象
             game_data = {
                 "player_name": "玩家角色",
-                "level": 10,
-                "health": 100,
                 "MaxHP": self.MaxHP,
                 "CurrentHP": self.CurrentHP,
                 "MaxEXP": self.MaxEXP,
                 "CurrentEXP": self.CurrentEXP,
+                "MaxLevel": self.MaxEXP,
+                "CurrentLevel": self.CurrentEXP,
                 "AllBulletNumber": self.AllBulletNumber,
                 "WeaopnBulletNumber": self.WeaopnBulletNumber,
                 "KilledEnemies": self.KilledEnemies,
@@ -2133,7 +2176,7 @@ class MyCharacter(ue.Character):
                 # 设置一个检查加载状态的定时器
                 def check_load_result():
                     # 每0.5秒检查一次加载状态，最多检查10次（5秒）
-                    max_attempts = 10
+                    max_attempts = 4
                     attempts = 0
                     
                     while attempts < max_attempts:
