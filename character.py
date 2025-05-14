@@ -854,6 +854,15 @@ class MyCharacter(ue.Character):
         # 记录日志
         ue.LogWarning(f"道具回血效果: +{add_hp} HP，当前生命值: {self.CurrentHP}/{self.MaxHP}")
     
+    # 拾取武器
+    def pick_up_weapon(self, weapon):
+        # type: (ue.Actor) -> None
+        attachment_rule = ue.EAttachmentRule.SnapToTarget
+        weapon.AttachToComponent(self.Mesh, 'WeaponSocket',
+            attachment_rule, attachment_rule, attachment_rule, True)
+        
+        self.weapon = weapon
+    
     def GenerateBullet(self):
         """处理子弹生成的回调函数"""
         try:
@@ -866,107 +875,15 @@ class MyCharacter(ue.Character):
             self.WeaopnBulletNumber -= 1
             ue.LogWarning(f"发射子弹，剩余弹药: {self.WeaopnBulletNumber}")
             
-            # 获取玩家控制器和相机方向
-            controller = self.GetWorld().GetPlayerController(0)
-            if not controller:
-                ue.LogError("无法获取玩家控制器")
-                return False
-                
-            # 获取玩家视角方向
-            player_view_point = controller.GetPlayerViewPoint()
-            if not player_view_point or len(player_view_point) != 2:
-                ue.LogError("无法获取玩家视角")
-                return False
-                
-            # 解包视角信息
-            camera_location = player_view_point[0]  # 相机位置
-            camera_rotation = player_view_point[1]  # 相机旋转
-
-            # 计算子弹生成位置 (枪口位置)
-            # 尝试从角色网格体获取武器插槽位置
-            socket_location = None
-            if self.Mesh and hasattr(self.Mesh, "GetSocketLocation"):
-                try:
-                    socket_location = self.Mesh.GetSocketLocation("WeaponSocket")
-                    if socket_location:
-                        ue.LogWarning(f"从武器插槽获取发射位置: {socket_location}")
-                except Exception as socket_error:
-                    ue.LogWarning(f"获取插槽位置失败: {socket_error}，将使用角色位置")
-            
-            # 如果无法获取插槽位置，使用角色位置加上偏移
-            if not socket_location:
-                actor_location = self.GetActorLocation()
-                forward_vector = ue.KismetMathLibrary.GetForwardVector(self.GetActorRotation())
-                offset = ue.KismetMathLibrary.Multiply_VectorFloat(forward_vector, 100.0)  # 前方100单位
-                offset.Z += 50.0  # 上方50单位
-                spawn_location = ue.KismetMathLibrary.Add_VectorVector(actor_location, offset)
+            # 检查是否有武器引用
+            if hasattr(self, 'weapon') and self.weapon:
+                self.weapon.fire()  # 传递角色引用给fire函数
+                return True
             else:
-                spawn_location = socket_location
-            
-            # 加载子弹蓝图类
-            bullet_class = ue.LoadClass("/Game/ThirdPersonCPP/Blueprints/Bullet/CharacterBulletBP.CharacterBulletBP_C")
-            if not bullet_class:
-                ue.LogError("无法加载子弹蓝图类")
+                # 如果没有武器引用，显示错误信息
+                ue.LogError("角色没有绑定武器，无法发射子弹")
                 return False
             
-            # 计算子弹飞行方向
-            target_direction = None
-            
-            # 首先尝试从鼠标点击位置获取方向
-            hit_tuple = controller.GetHitResultUnderCursorByChannel(
-                ue.ETraceTypeQuery.TraceTypeQuery1,  # 默认通道
-                True  # 复杂碰撞检测
-            )
-            has_hit = hit_tuple[0]
-            hit_result = hit_tuple[1]
-            
-            if has_hit:
-                # 如果射线命中了物体，使用命中点方向
-                target_location = hit_result.Location
-                target_direction = ue.KismetMathLibrary.GetDirectionUnitVector(
-                    spawn_location, 
-                    target_location
-                )
-                ue.LogWarning(f"根据射线命中点设置子弹方向: {target_direction}")
-            else:
-                # 使用相机前方向作为子弹方向
-                target_direction = ue.KismetMathLibrary.GetForwardVector(camera_rotation)
-                ue.LogWarning(f"使用相机朝向作为子弹方向: {target_direction}")
-            
-            # 使用计算的方向设置子弹旋转
-            bullet_rotation = ue.KismetMathLibrary.MakeRotFromX(target_direction)
-            
-            # 生成子弹Actor
-            world = self.GetWorld()
-            if world:
-                try:
-                    # 在UE Python绑定中，使用标准的SpawnActor方式
-                    bullet = world.SpawnActor(bullet_class, spawn_location, bullet_rotation)
-                    if bullet:
-                        ue.LogWarning(f"成功生成子弹: {bullet}")
-                        
-                        # 如果子弹有ProjectileMovement组件，设置初始速度
-                        if hasattr(bullet, "ProjectileMovement"):
-                            if hasattr(bullet, "InitialSpeed"):
-                                bullet.ProjectileMovement.InitialSpeed = bullet.InitialSpeed
-                                bullet.ProjectileMovement.MaxSpeed = bullet.InitialSpeed
-                                ue.LogWarning(f"设置子弹速度: {bullet.InitialSpeed}")
-                            else:
-                                # 设置默认速度
-                                bullet.ProjectileMovement.InitialSpeed = 3000.0
-                                bullet.ProjectileMovement.MaxSpeed = 3000.0
-                                ue.LogWarning("设置子弹默认速度: 3000")
-                        
-                        return True
-                    else:
-                        ue.LogError("子弹生成失败")
-                except Exception as spawn_error:
-                    ue.LogError(f"生成子弹时出错: {spawn_error}")
-                    return False
-            else:
-                ue.LogError("无法获取World实例")
-                
-            return False
         except Exception as e:
             import traceback
             ue.LogError(f"执行发射子弹逻辑时出错: {str(e)}")
@@ -2107,15 +2024,6 @@ class MyCharacter(ue.Character):
             
             # 设置角色朝向 - 相当于蓝图中的SetActorRotation节点
             self.SetActorRotation(new_rotation, False)
-
-    # 拾取武器
-    def pick_up_weapon(self, weapon):
-        # type: (ue.Actor) -> None
-        attachment_rule = ue.EAttachmentRule.SnapToTarget
-        weapon.AttachToComponent(self.Mesh, 'WeaponSocket',
-            attachment_rule, attachment_rule, attachment_rule, True)
-        
-        self.weapon = weapon
     
     # 奔跑功能
     def _run_start(self):
