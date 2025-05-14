@@ -150,7 +150,7 @@ class MyCharacter(ue.Character):
             if not mesh_to_use:
                 ue.LogError(f"[动画-{tag}] 获取网格体组件失败")
                 return False
-                
+            
             # 加载蒙太奇
             montage = ue.LoadObject(ue.AnimMontage, montage_path)
             if not montage:
@@ -160,37 +160,37 @@ class MyCharacter(ue.Character):
             ue.LogWarning(f"[动画-{tag}] 已加载蒙太奇: {montage.GetName() if hasattr(montage, 'GetName') else montage_path}")
             
             # 优先使用Character类的PlayAnimMontage方法
-            # if hasattr(self, 'PlayAnimMontage'):
-            #     try:
-            #         duration = self.PlayAnimMontage(montage, play_rate, start_section_name)
-            #         if duration > 0:
-            #             ue.LogWarning(f"[动画-{tag}] 通过Character.PlayAnimMontage成功播放蒙太奇，持续时间: {duration}秒")
+            if hasattr(self, 'PlayAnimMontage'):
+                try:
+                    duration = self.PlayAnimMontage(montage, play_rate, start_section_name)
+                    if duration > 0:
+                        ue.LogWarning(f"[动画-{tag}] 通过Character.PlayAnimMontage成功播放蒙太奇，持续时间: {duration}秒")
                         
-            #             # 获取动画实例以设置回调
-            #             anim_instance = mesh_to_use.GetAnimInstance()
-            #             if anim_instance:
-            #                 # 设置回调
-            #                 self._setup_animation_callbacks(anim_instance, montage, completion_callback, tag)
-            #             else:
-            #                 # 如果无法获取动画实例，使用定时器作为备用
-            #                 if completion_callback:
-            #                     import threading
-            #                     timer = threading.Timer(duration / play_rate, completion_callback)
-            #                     timer.start()
-            #                     ue.LogWarning(f"[动画-{tag}] 使用定时器回调，将在{duration / play_rate}秒后调用")
+                        # 获取动画实例以设置回调
+                        anim_instance = mesh_to_use.GetAnimInstance()
+                        if anim_instance:
+                            # 设置回调
+                            self._setup_animation_callbacks(anim_instance, montage, completion_callback, tag)
+                        else:
+                            # 如果无法获取动画实例，使用定时器作为备用
+                            if completion_callback:
+                                import threading
+                                timer = threading.Timer(duration / play_rate, completion_callback)
+                                timer.start()
+                                ue.LogWarning(f"[动画-{tag}] 使用定时器回调，将在{duration / play_rate}秒后调用")
                                 
-            #             return True
-            #     except Exception as e:
-            #         ue.LogWarning(f"[动画-{tag}] 通过Character.PlayAnimMontage播放失败: {e}，尝试其他方法")
+                        return True
+                except Exception as e:
+                    ue.LogWarning(f"[动画-{tag}] 通过Character.PlayAnimMontage播放失败: {e}，尝试其他方法")
             
             # 获取动画实例
-            anim_instance = mesh_to_use.GetAnimInstance()
-            if not anim_instance:
-                ue.LogError(f"[动画-{tag}] 无法获取动画实例")
-                return False
+            # anim_instance = mesh_to_use.GetAnimInstance()
+            # if not anim_instance:
+            #     ue.LogError(f"[动画-{tag}] 无法获取动画实例")
+            #     return False
                 
-            anim_instance_class = type(anim_instance).__name__
-            ue.LogWarning(f"[动画-{tag}] 动画实例类型: {anim_instance_class}")
+            # anim_instance_class = type(anim_instance).__name__
+            # ue.LogWarning(f"[动画-{tag}] 动画实例类型: {anim_instance_class}")
             
             # 直接使用动画实例播放蒙太奇
             # if hasattr(anim_instance, 'Montage_Play'):
@@ -241,21 +241,21 @@ class MyCharacter(ue.Character):
             #                 ue.LogWarning(f"[动画-{tag}] 调用动画实例的 {func_name} 函数失败: {func_ex}")
             
             # 最后尝试使用网格体的PlayAnimation
-            if hasattr(mesh_to_use, 'PlayAnimation'):
-                try:
-                    mesh_to_use.PlayAnimation(montage, False)
-                    ue.LogWarning(f"[动画-{tag}] 使用网格体的PlayAnimation方法播放动画")
+            # if hasattr(mesh_to_use, 'PlayAnimation'):
+            #     try:
+            #         mesh_to_use.PlayAnimation(montage, False)
+            #         ue.LogWarning(f"[动画-{tag}] 使用网格体的PlayAnimation方法播放动画")
                     
-                    # 设置定时器回调
-                    if completion_callback:
-                        import threading
-                        animation_duration = montage.GetPlayLength() if hasattr(montage, 'GetPlayLength') else 1.5
-                        timer = threading.Timer(animation_duration / play_rate, completion_callback)
-                        timer.start()
-                        ue.LogWarning(f"[动画-{tag}] 使用定时器回调，将在{animation_duration / play_rate}秒后调用")
-                    return True
-                except Exception as anim_ex:
-                    ue.LogWarning(f"[动画-{tag}] 使用网格体PlayAnimation播放失败: {anim_ex}")
+            #         # 设置定时器回调
+            #         if completion_callback:
+            #             import threading
+            #             animation_duration = montage.GetPlayLength() if hasattr(montage, 'GetPlayLength') else 1.5
+            #             timer = threading.Timer(animation_duration / play_rate, completion_callback)
+            #             timer.start()
+            #             ue.LogWarning(f"[动画-{tag}] 使用定时器回调，将在{animation_duration / play_rate}秒后调用")
+            #         return True
+            #     except Exception as anim_ex:
+            #         ue.LogWarning(f"[动画-{tag}] 使用网格体PlayAnimation播放失败: {anim_ex}")
             
             # 如果所有方法都失败
             ue.LogError(f"[动画-{tag}] 所有播放方法均失败，无法播放蒙太奇")
@@ -832,9 +832,6 @@ class MyCharacter(ue.Character):
         """
         try:
             delegate_prefix = f"_{callback_prefix}_" if callback_prefix else "_"
-            
-            # 首先彻底清理所有已存在的回调
-            self._clean_all_montage_callbacks(anim_instance)
             
             # 保存当前激活的回调前缀，用于后续清理
             self._current_active_montage_prefix = callback_prefix

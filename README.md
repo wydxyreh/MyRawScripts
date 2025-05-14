@@ -121,3 +121,29 @@ C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\Content\Mannequin\Anim
 
 
 结合C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\Plugins\NePythonBinding\Tools\pystubs\ue\init.pyi，修正该错误
+
+C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\character.py中的_play_animation_montage中，这部分代码是否有更好的定时器回调处理方式，比如不用threading？
+
+
+修改C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\character.py中的_play_animation_montage函数，使其使用Character类的PlayAnimMontage方法来播放动画蒙太奇，且要求动画播放的对象为：
+蓝图中的网格体为：
+Begin Object Class=/Script/Engine.SkeletalMeshComponent Name="CharacterMesh0" ExportPath="/Script/Engine.SkeletalMeshComponent'/Engine/Transient.CharacterMesh0'"
+   AnimClass="/Script/Engine.AnimBlueprintGeneratedClass'/Game/ThirdPersonCPP/Blueprints/AnimeBP/MyCharacterAnimBlueprint.MyCharacterAnimBlueprint_C'"
+   SkeletalMesh="/Script/Engine.SkeletalMesh'/Game/Mannequin/Character/Mesh/SK_Mannequin.SK_Mannequin'"
+   SkinnedAsset="/Script/Engine.SkeletalMesh'/Game/Mannequin/Character/Mesh/SK_Mannequin.SK_Mannequin'"
+   VisibilityBasedAnimTickOption=AlwaysTickPose
+   BodyInstance=(ObjectType=ECC_Pawn,CollisionEnabled=QueryOnly,CollisionProfileName="CharacterMesh",CollisionResponses=(ResponseArray=((Channel="Pawn",Response=ECR_Ignore),(Channel="Visibility",Response=ECR_Ignore),(Channel="Vehicle",Response=ECR_Ignore))))
+   RelativeLocation=(X=0.000000,Y=0.000000,Z=-88.000000)
+   RelativeRotation=(Pitch=0.000000,Yaw=-90.000000,Roll=0.000000)
+End Object
+
+拖拽出来得到：
+Begin Object Class=/Script/BlueprintGraph.K2Node_VariableGet Name="K2Node_VariableGet_0" ExportPath="/Script/BlueprintGraph.K2Node_VariableGet'/Game/ThirdPersonCPP/Blueprints/MyCharacterBP.MyCharacterBP:EventGraph.K2Node_VariableGet_0'"
+   VariableReference=(MemberName="Mesh",bSelfContext=True)
+   NodePosX=288
+   NodePosY=1216
+   NodeGuid=ED587A7A40FA8B3E778CFB82665AE26C
+   CustomProperties Pin (PinId=D00D6A174860DAFE4E999D8B6A6DCF96,PinName="Mesh",PinFriendlyName=NSLOCTEXT("UObjectDisplayNames", "Character:Mesh", "Mesh"),Direction="EGPD_Output",PinType.PinCategory="object",PinType.PinSubCategory="",PinType.PinSubCategoryObject="/Script/CoreUObject.Class'/Script/Engine.SkeletalMeshComponent'",PinType.PinSubCategoryMemberReference=(),PinType.PinValueType=(),PinType.ContainerType=None,PinType.bIsReference=False,PinType.bIsConst=False,PinType.bIsWeakPointer=False,PinType.bIsUObjectWrapper=True,PinType.bSerializeAsSinglePrecisionFloat=False,PersistentGuid=00000000000000000000000000000000,bHidden=False,bNotConnectable=False,bDefaultValueIsReadOnly=False,bDefaultValueIsIgnored=False,bAdvancedView=False,bOrphanedPin=False,)
+   CustomProperties Pin (PinId=17DDC70943D77A9D7CFB4B97E763C20F,PinName="self",PinFriendlyName=NSLOCTEXT("K2Node", "Target", "Target"),PinType.PinCategory="object",PinType.PinSubCategory="",PinType.PinSubCategoryObject="/Script/CoreUObject.Class'/Script/Engine.Character'",PinType.PinSubCategoryMemberReference=(),PinType.PinValueType=(),PinType.ContainerType=None,PinType.bIsReference=False,PinType.bIsConst=False,PinType.bIsWeakPointer=False,PinType.bIsUObjectWrapper=False,PinType.bSerializeAsSinglePrecisionFloat=False,PersistentGuid=00000000000000000000000000000000,bHidden=True,bNotConnectable=False,bDefaultValueIsReadOnly=False,bDefaultValueIsIgnored=False,bAdvancedView=False,bOrphanedPin=False,)
+End Object
+使用的语法严格参考C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\Plugins\NePythonBinding\Tools\pystubs\ue\init.pyi，版本为UE5
