@@ -881,7 +881,7 @@ class MyCharacter(ue.Character):
             # 解包视角信息
             camera_location = player_view_point[0]  # 相机位置
             camera_rotation = player_view_point[1]  # 相机旋转
-            
+
             # 计算子弹生成位置 (枪口位置)
             # 尝试从角色网格体获取武器插槽位置
             socket_location = None
@@ -904,7 +904,7 @@ class MyCharacter(ue.Character):
                 spawn_location = socket_location
             
             # 加载子弹蓝图类
-            bullet_class = ue.LoadClass("/Game/ThirdPersonCPP/Blueprints/Bullet/CharacterSharpBullet.CharacterSharpBullet_C")
+            bullet_class = ue.LoadClass("/Game/ThirdPersonCPP/Blueprints/Bullet/CharacterBulletBP.CharacterBulletBP_C")
             if not bullet_class:
                 ue.LogError("无法加载子弹蓝图类")
                 return False
@@ -1034,17 +1034,26 @@ class MyCharacter(ue.Character):
                 # 获取鼠标位置
                 mouse_position = controller.GetMousePosition()
                 if mouse_position and len(mouse_position) >= 2:
-                    mouse_x = mouse_position[0]
-                    mouse_y = mouse_position[1]
-                    
-                    # 将鼠标屏幕坐标转换为世界空间方向
-                    world_direction = controller.DeprojectScreenPositionToWorld(mouse_x, mouse_y)
+                    # 明确将鼠标坐标转换为浮点数
+                    try:
+                        mouse_x = float(mouse_position[0])
+                        mouse_y = float(mouse_position[1])
+                        ue.LogWarning(f"[攻击] 鼠标坐标转换前: X={mouse_position[0]} ({type(mouse_position[0]).__name__}), Y={mouse_position[1]} ({type(mouse_position[1]).__name__})")
+                        ue.LogWarning(f"[攻击] 鼠标坐标转换后: X={mouse_x} ({type(mouse_x).__name__}), Y={mouse_y} ({type(mouse_y).__name__})")
+                            
+                        # 将鼠标屏幕坐标转换为世界空间方向
+                        world_direction = controller.DeprojectScreenPositionToWorld(mouse_x, mouse_y)
+                    except (TypeError, ValueError) as e:
+                        ue.LogWarning(f"[攻击] 鼠标坐标转换失败: {e}")
+                        # 转换失败时的备用方案 - 使用相机前方向量
+                        target_direction = ue.KismetMathLibrary.GetForwardVector(camera_rotation)
+                        ue.LogWarning(f"[攻击] 使用相机朝向作为备用方向: {target_direction}")
                     if world_direction and len(world_direction) >= 2:
                         direction = world_direction[1]  # 第二个元素是方向向量
                         
                         # 沿着方向向量延伸一段距离（例如10000单位）作为目标点
                         # 使用向量计算：目标点 = 起点 + 方向 * 距离
-                        target_location = ue.KismetMathLibrary.VectorAdd(
+                        target_location = ue.KismetMathLibrary.Add_VectorVector(
                             camera_location,
                             ue.KismetMathLibrary.Multiply_VectorFloat(direction, 10000.0)
                         )
@@ -1056,7 +1065,7 @@ class MyCharacter(ue.Character):
                     forward_vector = ue.KismetMathLibrary.GetForwardVector(camera_rotation)
                     
                     # 计算相机前方远处的点
-                    target_location = ue.KismetMathLibrary.VectorAdd(
+                    target_location = ue.KismetMathLibrary.Add_VectorVector(
                         camera_location,
                         ue.KismetMathLibrary.Multiply_VectorFloat(forward_vector, 10000.0)
                     )
