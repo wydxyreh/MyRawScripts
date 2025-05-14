@@ -49,6 +49,10 @@ class MyCharacter(ue.Character):
     def _play_reload_animation(self):
         """播放换弹动画（由_reload_weapon调用）"""
         montage_path = "/Game/Mannequin/Animations/My_Reload_Rifle_Hip_Montage.My_Reload_Rifle_Hip_Montage"
+    
+        # 播放换弹音效
+        self._play_sound("/Game/Sounds/S_WEP_Rifle_Reload.S_WEP_Rifle_Reload")
+    
         if not self._play_animation_montage(montage_path, self._complete_reload, 1.0, "", "reload"):
             ue.LogError("[动画] 播放换弹动画失败")
             self._reset_state("reload")
@@ -506,7 +510,23 @@ class MyCharacter(ue.Character):
     def ReceiveEndPlay(self, EndPlayReason):
         try:
             ue.LogWarning('角色退出游戏，自动保存游戏数据...')
-            
+        
+            # 停止背景音乐
+            if hasattr(self, 'music_should_play'):
+                try:
+                    # 设置标志以停止音乐循环线程
+                    self.music_should_play = False
+                    ue.LogWarning('已设置停止背景音乐循环')
+                
+                    # 尝试停止所有声音（如果有可用的方法）
+                    try:
+                        ue.GameplayStatics.SetGlobalTimeDilation(self, 1.0)  # 确保时间膨胀正常
+                    except:
+                        pass
+                
+                except Exception as audio_error:
+                    ue.LogError(f'停止背景音乐失败: {str(audio_error)}')
+        
             # 自动保存游戏数据
             try:
                 # 调用保存游戏数据的函数
@@ -516,14 +536,14 @@ class MyCharacter(ue.Character):
                 import traceback
                 ue.LogError(f'退出游戏时自动保存失败: {str(save_error)}')
                 ue.LogError(traceback.format_exc())
-            
+        
             # 获取动画实例
             if self.Mesh:
                 anim_instance = self.Mesh.GetAnimInstance()
                 if anim_instance:
                     # 使用清理函数移除所有回调
                     self._clean_all_montage_callbacks(anim_instance)
-                        
+                    
             ue.LogWarning('角色退出游戏，已清理所有回调')
         except Exception as e:
             import traceback
@@ -537,13 +557,13 @@ class MyCharacter(ue.Character):
         # 导入protobuf
         import sys
         sys.path.append("C:\\Users\\wydx\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\site-packages")
-        
+    
         # 创建战斗数据UI
         self._create_battle_ui()
-        
+    
         # 初始化玩家属性和控制器
         self._init_player_attributes()
-        
+    
         # 设置控制器
         controller = self.GetWorld().GetPlayerController()
         controller.UnPossess()
@@ -553,13 +573,16 @@ class MyCharacter(ue.Character):
         # 设置输入和摄像机
         self._setup_input(controller)
         self._configure_camera()
-        
+    
         # 初始化玩家网络数据
         self._initialize_player_data()
-        
+    
         # 配置委托
         self._setup_delegates()
 
+        # 播放背景音乐
+        self._play_background_music()
+    
         # 自动登录
         self._auto_login()
 
@@ -1394,12 +1417,14 @@ class MyCharacter(ue.Character):
     def _play_attack_animation(self):
         """播放攻击动画（该方法专门负责动画播放，由_attack_started调用）"""
         montage_path = "/Game/Mannequin/Animations/My_Fire_Rifle_Hip_Montage.My_Fire_Rifle_Hip_Montage"
-        
+    
         # 播放前触发发射子弹事件
         if self.WeaopnBulletNumber > 0:
+            # 播放射击音效
+            self._play_sound("/Game/Sounds/S_WEP_Fire_08.S_WEP_Fire_08")
             self.FireBullet.Broadcast()
             ue.LogWarning("[动画] 触发发射子弹事件")
-        
+    
         # 播放攻击动画
         if not self._play_animation_montage(montage_path, lambda: self._reset_state("attack"), 1.0, "", "attack"):
             ue.LogError("[动画] 播放攻击动画失败")
@@ -2379,10 +2404,159 @@ class MyCharacter(ue.Character):
         self._set_movement_speed(600.0)
         
     def _set_movement_speed(self, speed):
-        """设置角色移动速度"""
-        if hasattr(self, 'CharacterMovement'):
-            old_speed = self.CharacterMovement.MaxWalkSpeed
-            self.CharacterMovement.MaxWalkSpeed = speed
-            ue.LogWarning(f"移动速度从{old_speed}更改为{speed}")
-        else:
-            ue.LogError("无法找到CharacterMovement组件")
+            """设置角色移动速度"""
+            if hasattr(self, 'CharacterMovement'):
+                old_speed = self.CharacterMovement.MaxWalkSpeed
+                self.CharacterMovement.MaxWalkSpeed = speed
+                ue.LogWarning(f"移动速度从{old_speed}更改为{speed}")
+            else:
+                ue.LogError("无法找到CharacterMovement组件")
+            
+    def _play_sound(self, sound_path):
+        """播放指定路径的音效
+    
+        Args:
+            sound_path (str): 音效资源的路径
+        """
+        try:
+            # 加载音效资源
+            sound = ue.LoadObject(ue.SoundBase, sound_path)
+            if not sound:
+                ue.LogError(f"[音效] 无法加载音效: {sound_path}")
+                return False
+        
+            # 打印音效详细信息
+            try:
+                sound_name = sound.GetName()
+            except (AttributeError, TypeError):
+                sound_name = "未知音效"
+            
+            sound_class = type(sound).__name__
+        
+            try:
+                sound_path_full = sound.GetPathName()
+            except (AttributeError, TypeError):
+                sound_path_full = sound_path
+        
+            ue.LogWarning(f"[音效] 播放音效:")
+            ue.LogWarning(f"[音效] - 名称: {sound_name}")
+            ue.LogWarning(f"[音效] - 类型: {sound_class}")
+            ue.LogWarning(f"[音效] - 路径: {sound_path_full}")
+        
+            # 使用PlaySound2D代替PlaySoundAtLocation来避免位置和旋转参数问题
+            ue.GameplayStatics.PlaySound2D(
+                self,       # WorldContextObject
+                sound,      # 音效资源
+                1.0,        # 音量倍数
+                1.0,        # 音调倍数
+                0.0,        # 起始时间
+                None,       # 并发设置
+                None        # 子标题
+            )
+        
+            ue.LogWarning(f"[音效] 音效播放成功: {sound_name}")
+            return True
+        
+        except Exception as e:
+            import traceback
+            ue.LogError(f"[音效] 播放音效时出错: {str(e)}")
+            ue.LogError(traceback.format_exc())
+            return False
+            
+    def _play_background_music(self):
+        """播放循环背景音乐直到游戏结束"""
+        try:
+            import threading
+            import time
+        
+            # 背景音乐路径
+            music_path = "/Game/Sounds/Borislav_Slavov_-_Song_Of_Balduran"
+        
+            # 加载音乐资源
+            music = ue.LoadObject(ue.SoundBase, music_path)
+            if not music:
+                ue.LogError(f"[音乐] 无法加载背景音乐: {music_path}")
+                return False
+        
+            # 打印音乐详细信息
+            try:
+                music_name = music.GetName()
+            except (AttributeError, TypeError):
+                music_name = "未知音乐"
+            
+            music_class = type(music).__name__
+        
+            try:
+                music_path_full = music.GetPathName()
+            except (AttributeError, TypeError):
+                music_path_full = music_path
+        
+            ue.LogWarning(f"[音乐] 播放背景音乐:")
+            ue.LogWarning(f"[音乐] - 名称: {music_name}")
+            ue.LogWarning(f"[音乐] - 类型: {music_class}")
+            ue.LogWarning(f"[音乐] - 路径: {music_path_full}")
+        
+            # 初始化控制标志
+            self.music_should_play = True
+        
+            # 播放背景音乐的函数
+            def play_music_once():
+                try:
+                    # 播放2D音乐(不受位置影响)
+                    ue.GameplayStatics.PlaySound2D(
+                        self,          # WorldContextObject
+                        music,         # 音乐资源
+                        1.0,           # 音量倍数
+                        1.0,           # 音调倍数
+                        0.0,           # 起始时间
+                        None,          # 并发设置
+                        None           # 子标题
+                    )
+                    ue.LogWarning("[音乐] 背景音乐播放中")
+                    return True
+                except Exception as e:
+                    ue.LogError(f"[音乐] 播放音乐时出错: {e}")
+                    return False
+        
+            # 循环播放背景音乐的函数
+            def music_loop():
+                while hasattr(self, 'music_should_play') and self.music_should_play:
+                    try:
+                        # 播放音乐
+                        play_music_once()
+                    
+                        # 等待一段时间后再次播放
+                        # 这里的等待时间应该根据音乐长度来设置
+                        # 稍微短一点以防止中断
+                        sleep_time = 175  # 假设音乐长度约3分钟
+                    
+                        # 分段睡眠，每次检查是否应该停止
+                        for _ in range(sleep_time):
+                            if not (hasattr(self, 'music_should_play') and self.music_should_play):
+                                break
+                            time.sleep(1)
+                    except Exception as e:
+                        ue.LogError(f"[音乐] 循环线程中出错: {e}")
+                        # 出错后短暂等待再尝试
+                        time.sleep(5)
+            
+                ue.LogWarning("[音乐] 背景音乐循环已停止")
+        
+            # 首先立即播放一次
+            play_music_once()
+        
+            # 创建循环播放的后台线程
+            music_thread = threading.Thread(target=music_loop, daemon=True)
+            music_thread.start()
+        
+            # 保存线程引用以便在需要时使用
+            self.music_thread = music_thread
+        
+            ue.LogWarning(f"[音乐] 循环背景音乐开始播放: {music_name}")
+            return True
+        
+        except Exception as e:
+            import traceback
+            ue.LogError(f"[音乐] 播放背景音乐时出错: {str(e)}")
+            ue.LogError(traceback.format_exc())
+            return False

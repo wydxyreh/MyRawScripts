@@ -808,7 +808,7 @@ class UserWidget(Widget):
 		pass
 
 	pass
-   
+
 class NePyUserWidget(UserWidget):
 	""" Ne Py User Widget """  # noqa
 
@@ -835,3 +835,11 @@ class NePyUserWidget(UserWidget):
 		pass
 
 	pass
+
+C:/Users/wydx/Documents/Unreal Projects/ThirdPersonWithPy/Content/Sounds/S_WEP_Fire_08.uasset
+
+C:/Users/wydx/Documents/Unreal Projects/ThirdPersonWithPy/Content/Sounds/S_WEP_Rifle_Reload.uasset
+
+C:/Users/wydx/Documents/Unreal Projects/ThirdPersonWithPy/Content/Sounds/Borislav_Slavov_-_Song_Of_Balduran.uasset
+
+对于C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\character.py，在玩家LeftMouseButton按下时，做成两种模式，默认时点射，即每点一下鼠标左键，发射一次子弹，按下T键切换为连射，即按下鼠标左键，则子弹每隔0.2秒发射一次，如果左键不松开，则一直发射直到弹匣打空。
