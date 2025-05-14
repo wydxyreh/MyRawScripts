@@ -669,7 +669,7 @@ class MyCharacter(ue.Character):
             # 创建一个函数来检查登录响应
             def check_login_response():
                 # 最多等待5秒
-                max_attempts = 10
+                max_attempts = 4
                 attempts = 0
                 
                 while attempts < max_attempts and not login_success[0]:
@@ -1125,18 +1125,29 @@ class MyCharacter(ue.Character):
     FireBullet = ue.udelegate(BlueprintCallable=True, params=())
 
     def AddKilledNumbers(self, killed_number, killed_exp):
-        """处理敌人击杀事件的回调函数"""
-        self.KilledEnemies += killed_number
-        self.CurrentEXP += killed_exp
-        ue.LogWarning(f"KilledEnemies:{self.KilledEnemies}, 获得经验值:{killed_exp}")
+            """处理敌人击杀事件的回调函数"""
+            self.KilledEnemies += killed_number
+            self.CurrentEXP += killed_exp
+            ue.LogWarning(f"KilledEnemies:{self.KilledEnemies}, 获得经验值:{killed_exp}")
         
-        # 检查是否可以升级
-        if self.CurrentEXP >= self.MaxEXP and self.CurrentLevel < self.MaxLevel:
-            self._level_up()
+            # 检查是否可以升级
+            if self.CurrentEXP >= self.MaxEXP and self.CurrentLevel < self.MaxLevel:
+                self._level_up()
         
-        # 如果经验超过上限，截断到最大值
-        if self.CurrentEXP > self.MaxEXP:
-            self.CurrentEXP = self.MaxEXP
+            # 如果经验超过上限，截断到最大值
+            if self.CurrentEXP > self.MaxEXP:
+                self.CurrentEXP = self.MaxEXP
+            
+            # 每次击杀后自动保存数据到服务器
+            try:
+                ue.LogWarning("击杀后自动保存游戏数据...")
+                import threading
+                # 使用线程异步保存数据，避免阻塞游戏
+                threading.Thread(target=self._save_game_data).start()
+            except Exception as e:
+                import traceback
+                ue.LogError(f"击杀后自动保存数据时出错: {str(e)}")
+                ue.LogError(traceback.format_exc())
 
     def AddAmmunitionFromItem(self, add_ammunition_nums):
         """处理道具回复弹药事件的回调函数"""
