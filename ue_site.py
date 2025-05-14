@@ -423,7 +423,7 @@ def process_network_events():
 			import traceback
 			ue.LogError(f"[网络] 错误详情: {traceback.format_exc()}")
 
-def login(username, password):
+def login(username, password, accomplishmentreset = False):
 	"""登录服务器
 	
 	Args:
@@ -482,6 +482,7 @@ def login(username, password):
 		# 设置登录凭据
 		network_status.client_entity.username = username
 		network_status.client_entity.password = password
+		network_status.client_entity.accomplishmentreset = accomplishmentreset
 		
 		# 执行登录
 		ue.LogWarning(f"[网络] 正在向服务器发送登录请求: 用户名={username}")

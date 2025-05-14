@@ -545,6 +545,274 @@ class MyCharacter(ue.Character):
         
         # 配置委托
         self._setup_delegates()
+
+        # 自动登录
+        self._auto_login()
+
+    def _auto_login(self):
+        """自动登录功能"""
+        try:
+            import ue_site
+            import time
+            import threading
+            
+            # 获取GameInstance并转换为MyGameInstance
+            game_instance = ue.GameplayStatics.GetGameInstance(self)
+            # 使用as_class替代cast进行类型转换
+            my_game_instance_class = ue.LoadClass('/Game/ThirdPersonCPP/Blueprints/MyGameInstance.MyGameInstance_C')
+            my_game_instance = None
+            
+            # 先检查类是否成功加载
+            if my_game_instance_class:
+                # 尝试将game_instance转换为MyGameInstance类型
+                try:
+                    # 尝试另一种转换方式
+                    if hasattr(game_instance, 'GetClass') and game_instance.GetClass().IsChildOf(my_game_instance_class):
+                        my_game_instance = game_instance
+                    else:
+                        ue.LogWarning("[自动登录] 使用直接引用GameInstance，而不进行转换")
+                        my_game_instance = game_instance
+                except Exception as ex:
+                    ue.LogWarning(f"[自动登录] 转换GameInstance时出错: {ex}，使用直接引用")
+                    my_game_instance = game_instance
+            else:
+                ue.LogError("[自动登录] 无法加载MyGameInstance类")
+                return False
+                
+            if not my_game_instance:
+                ue.LogError("[自动登录] 无法获取GameInstance")
+                return False
+                
+            # 从GameInstance中获取账号密码
+            username = my_game_instance.instance_account if hasattr(my_game_instance, 'instance_account') else "None"
+            password = my_game_instance.instance_password if hasattr(my_game_instance, 'instance_password') else "None"
+            
+            # 输出登录信息(与蓝图中的PrintString对应)
+            ue.LogWarning(f"[自动登录] 从GameInstance获取账号: {username}")
+            ue.LogWarning(f"[自动登录] 从GameInstance获取密码: {password}")
+            
+            # 获取单例网络状态
+            network_status = ue_site.network_status
+            ue.LogWarning(f"[自动登录] 登录前状态: {network_status.get_status_dict()}")
+            
+            # 先检查是否已经登录
+            # 两种方式检查登录状态: 通过network_status和通过client_entity
+            if network_status.auth_status["is_authenticated"]:
+                ue.LogWarning(f"[自动登录] 已经登录为用户: {network_status.auth_status['username']}，无需重复登录")
+                return True
+            
+            # 如果有client_entity，还需要检查其认证状态
+            if (network_status.client_entity and 
+                hasattr(network_status.client_entity, 'authenticated') and 
+                network_status.client_entity.authenticated):
+                # 同步客户端状态
+                network_status.auth_status["is_authenticated"] = True
+                network_status.auth_status["username"] = network_status.client_entity.username
+                
+                # 同步token信息
+                if hasattr(network_status.client_entity, 'token'):
+                    network_status.auth_status["token"] = network_status.client_entity.token
+                    
+                ue.LogWarning(f"[自动登录] 已经通过客户端实体验证为用户: {network_status.client_entity.username}，无需重复登录")
+                return True
+                
+            if network_status.auth_status["login_in_progress"]:
+                # 检查是否是过期的登录进行中状态
+                current_time = time.time()
+                # 如果last_login_attempt不存在或为0，设置一个默认值
+                last_attempt = network_status.auth_status.get("last_login_attempt", 0)
+                if current_time - last_attempt < 10.0:
+                    ue.LogWarning("[自动登录] 登录操作正在进行中，请等待...")
+                    # 在等待时主动处理一次网络消息
+                    ue_site._process_network_internal()
+                    ue_site._process_messages_internal()
+                    return False
+                else:
+                    ue.LogWarning("[自动登录] 上一次登录请求已超时，将重新尝试")
+                    # 重置登录进行中状态
+                    network_status.auth_status["login_in_progress"] = False
+                    # 继续执行登录逻辑
+            
+            # 检查网络是否已初始化并连接
+            is_ready, error_msg = self._check_network_ready()
+            if not is_ready:
+                ue.LogError(f"{error_msg}，无法登录")
+                return False
+            
+            # 从GameInstance获取新游戏标记
+            is_new_game = my_game_instance.instance_isnewgame if hasattr(my_game_instance, 'instance_isnewgame') else False
+            ue.LogWarning(f"[自动登录] 是否为新游戏: {is_new_game}")
+            
+            # 使用账号密码登录
+            ue.LogWarning(f"[自动登录] 自动登录 - 用户名: {username}")
+            
+            # 立即处理网络消息，确保连接状态最新
+            ue_site._process_network_internal()
+            
+            # 发送登录请求
+            login_sent = ue_site.login(username, password, is_new_game)
+            if not login_sent:
+                ue.LogWarning("[自动登录] 登录请求发送失败")
+                if hasattr(my_game_instance, 'instance_login_result'):
+                    my_game_instance.instance_login_result = False
+                
+                self._disconnect_from_server()
+                self._open_start_map()
+                return False
+            
+            ue.LogWarning("[自动登录] 登录请求已发送，等待服务器响应...")
+            
+            # 创建一个事件来表示登录操作完成
+            login_completed = threading.Event()
+            login_success = [False]  # 使用列表作为可变对象存储登录结果
+            
+            # 创建一个函数来检查登录响应
+            def check_login_response():
+                # 最多等待5秒
+                max_attempts = 10
+                attempts = 0
+                
+                while attempts < max_attempts and not login_success[0]:
+                    # 等待短暂时间让服务器有机会响应
+                    time.sleep(0.5)
+                    attempts += 1
+                    
+                    # 直接调用消息处理函数
+                    ue_site._process_network_internal()
+                    ue_site._process_messages_internal()
+                    
+                    # 检查登录状态
+                    if ue_site.is_authenticated():
+                        ue.LogWarning(f"[自动登录] 用户 {username} 登录成功！")
+                        login_success[0] = True
+                        break
+                    
+                    # 检查是否有明确的登录失败信息
+                    auth_status = ue_site.network_status.auth_status
+                    if "login_failed" in auth_status and auth_status["login_failed"]:
+                        ue.LogWarning(f"[自动登录] 登录失败: {auth_status.get('error_message', '未知错误')}")
+                        break
+                    
+                    # 检查网络连接是否断开
+                    if not ue_site.network_status.is_connected:
+                        ue.LogWarning("[自动登录] 网络连接已断开，登录过程中断")
+                        break
+                    
+                    ue.LogWarning(f"[自动登录] 等待登录响应... ({attempts}/{max_attempts})")
+                
+                # 设置事件以通知主线程登录检查完成
+                login_completed.set()
+            
+            # 启动线程检查登录响应
+            threading.Thread(target=check_login_response).start()
+            
+            # 等待登录操作完成或超时
+            login_completed.wait(6.0)  # 最多等待6秒
+            
+            # 设置登录结果到GameInstance
+            if hasattr(my_game_instance, 'instance_login_result'):
+                my_game_instance.instance_login_result = login_success[0]
+            
+            # 如果登录失败，打开开始地图
+            if not login_success[0]:
+                ue.LogWarning("[自动登录] 登录失败，打开开始地图")
+                self._disconnect_from_server()
+                self._open_start_map()
+            else:
+                ue.LogWarning(f"[自动登录] 登录成功")
+            
+            return login_success[0]
+        except ImportError:
+            ue.LogError("[自动登录] 导入ue_site模块失败，无法登录")
+            self._disconnect_from_server()
+            ue.GameplayStatics.OpenLevelBySoftObjectPtr(self, "/Game/ThirdPersonCPP/Maps/开始地图.开始地图", True, "")
+            return False
+        except Exception as e:
+            ue.LogError(f"触发登录时出错: {str(e)}")
+            import traceback
+            ue.LogError(f"[自动登录] 错误详情: {traceback.format_exc()}")
+            self._disconnect_from_server()
+            # 使用OpenLevel替代OpenLevelBySoftObjectPtr
+            try:
+                ue.LogWarning("[自动登录] 由于错误，尝试打开开始地图")
+                ue.GameplayStatics.OpenLevel(self, "开始地图", True)
+            except Exception as ex:
+                ue.LogError(f"[自动登录] 打开关卡失败: {ex}")
+                try:
+                    # 备用方法
+                    ue.GameplayStatics.OpenLevelByName(self, "开始地图", True)
+                except Exception as ex2:
+                    ue.LogError(f"[自动登录] 备用方法打开关卡也失败: {ex2}")
+            return False
+
+    def _open_start_map(self):
+        """打开开始地图"""
+        try:
+            ue.LogWarning("[自动登录] 尝试打开开始地图")
+            ue.GameplayStatics.OpenLevel(self, "开始地图", True)
+        except Exception as e:
+            ue.LogError(f"[自动登录] 打开开始地图失败: {e}")
+            try:
+                # 备用方法
+                ue.GameplayStatics.OpenLevelByName(self, "开始地图", True)
+            except Exception as ex:
+                ue.LogError(f"[自动登录] 备用方法打开开始地图也失败: {ex}")
+
+    def _disconnect_from_server(self):
+        """断开与服务器的连接"""
+        try:
+            import ue_site
+            
+            # 获取网络状态单例
+            network_status = ue_site.network_status
+            
+            ue.LogWarning("[网络] 尝试断开与服务器的连接")
+            
+            # 检查是否有已初始化的网络客户端
+            if network_status.is_network_initialized and network_status.network_client:
+                # 检查是否已连接
+                if network_status.is_connected:
+                    # 调用断开连接方法
+                    if hasattr(network_status.network_client, 'disconnect'):
+                        network_status.network_client.disconnect()
+                        ue.LogWarning("[网络] 已断开与服务器的连接")
+                    else:
+                        ue.LogError("[网络] 网络客户端没有disconnect方法")
+                    
+                    # 更新连接状态
+                    network_status.is_connected = False
+                    
+                    # 清理认证状态
+                    network_status.auth_status = {
+                        "is_authenticated": False,
+                        "username": "",
+                        "token": "",
+                        "login_in_progress": False,
+                        "last_login_attempt": 0,
+                        "login_time": 0,
+                        "last_token_refresh": 0
+                    }
+                    
+                    # 如果有client_entity，也清理其认证状态
+                    if network_status.client_entity:
+                        if hasattr(network_status.client_entity, 'authenticated'):
+                            network_status.client_entity.authenticated = False
+                        if hasattr(network_status.client_entity, 'token'):
+                            network_status.client_entity.token = ""
+                else:
+                    ue.LogWarning("[网络] 当前未连接服务器，无需断开")
+            else:
+                ue.LogWarning("[网络] 网络客户端未初始化，无需断开")
+                
+            return True
+        except ImportError:
+            ue.LogError("[网络] 导入ue_site模块失败，无法断开连接")
+            return False
+        except Exception as e:
+            ue.LogError(f"[网络] 断开连接时出错: {str(e)}")
+            import traceback
+            ue.LogError(f"[网络] 错误详情: {traceback.format_exc()}")
+            return False
     
     def _create_battle_ui(self):
         """创建战斗数据UI"""
@@ -747,7 +1015,6 @@ class MyCharacter(ue.Character):
     AllBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
     WeaopnBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
     KilledEnemies = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
-    KilledEnemiesReset = False
     
     def _on_take_any_damage(self, damaged_actor, damage, damage_type, instigated_by, damage_causer):
         """
@@ -1417,7 +1684,6 @@ class MyCharacter(ue.Character):
         try:
             import ue_site
             import time
-            import sys
             
             # 获取网络状态单例
             network_status = ue_site.network_status
@@ -1463,7 +1729,34 @@ class MyCharacter(ue.Character):
                 return False
             
             # 尝试登录
-            success = ue_site.login(username, password)
+            game_instance = ue.GameplayStatics.GetGameInstance(self)
+            # 使用正确的方式获取和转换MyGameInstance
+            my_game_instance_class = ue.LoadClass('/Game/ThirdPersonCPP/Blueprints/MyGameInstance.MyGameInstance_C')
+            my_game_instance = None
+            
+            # 先检查类是否成功加载
+            if my_game_instance_class:
+                # 尝试将game_instance转换为MyGameInstance类型
+                try:
+                    # 尝试另一种转换方式
+                    if hasattr(game_instance, 'GetClass') and game_instance.GetClass().IsChildOf(my_game_instance_class):
+                        my_game_instance = game_instance
+                    else:
+                        ue.LogWarning("[登录] 使用直接引用GameInstance，而不进行转换")
+                        my_game_instance = game_instance
+                except Exception as ex:
+                    ue.LogWarning(f"[登录] 转换GameInstance时出错: {ex}，使用直接引用")
+                    my_game_instance = game_instance
+            else:
+                ue.LogWarning("[登录] 无法加载MyGameInstance类，使用原始GameInstance")
+                my_game_instance = game_instance
+                
+            # 安全获取is_new_game值
+            is_new_game = False
+            if my_game_instance and hasattr(my_game_instance, 'instance_isnewgame'):
+                is_new_game = my_game_instance.instance_isnewgame
+
+            success = ue_site.login(username, password, is_new_game)
             if success:
                 ue.LogWarning(f"[登录] 正在尝试以用户名 {username} 登录...")
                 
