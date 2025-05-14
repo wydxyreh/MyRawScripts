@@ -687,6 +687,10 @@ class MyCharacter(ue.Character):
         self.ItemAddHP.Add(self.AddHPFromItem)
         self.TickAddAmmunition.Add(self.AddAmmunitionFromTick)
         self.FireBullet.Add(self.GenerateBullet)
+        
+        # 添加伤害委托绑定
+        self.OnTakeAnyDamage.Add(self._on_take_any_damage)
+        ue.LogWarning("已绑定OnTakeAnyDamage委托，角色将响应伤害事件")
 
     # 玩家状态
     Died = ue.uproperty(bool, BlueprintReadWrite=True, Category="MyCharacter")
@@ -743,6 +747,59 @@ class MyCharacter(ue.Character):
     AllBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
     WeaopnBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
     KilledEnemies = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    
+    def _on_take_any_damage(self, damaged_actor, damage, damage_type, instigated_by, damage_causer):
+        """
+        OnTakeAnyDamage委托的回调函数，处理角色受到伤害的逻辑
+        
+        参数:
+            damaged_actor: 受到伤害的Actor（即自身）
+            damage: 伤害值
+            damage_type: 伤害类型
+            instigated_by: 造成伤害的控制器
+            damage_causer: 造成伤害的Actor
+        """
+        try:
+            # 更新角色的当前生命值
+            self.CurrentHP -= damage
+            
+            # 记录伤害信息
+            damage_causer_name = damage_causer.GetName() if damage_causer and hasattr(damage_causer, 'GetName') else "未知"
+            damage_type_name = damage_type.GetName() if damage_type and hasattr(damage_type, 'GetName') else "未知"
+            ue.LogWarning(f"角色受到 {damage} 点伤害，伤害类型: {damage_type_name}，来源: {damage_causer_name}")
+            
+            # 检查生命值是否小于等于0
+            if self.CurrentHP <= 0:
+                # 处理角色死亡逻辑
+                self.Died = True
+                ue.LogWarning(f"角色受致命伤害，当前生命值: {self.CurrentHP}")
+                
+                # 可以在此处添加死亡动画播放或其他死亡逻辑
+            else:
+                # 播放受伤动画
+                if not self.OnHit:  # 防止多次受击动画叠加
+                    # 设置受击状态
+                    self.OnHit = True
+                    
+                    # 使用已有的动画播放系统播放受伤动画
+                    self._play_animation_montage(
+                        "/Game/Mannequin/Animations/My_Hit_React_4_Montage.My_Hit_React_4_Montage",
+                        lambda: self._reset_hit_state(),
+                        1.0, "", "hit"
+                    )
+                    
+                    ue.LogWarning(f"角色受到伤害后，当前生命值: {self.CurrentHP}")
+                else:
+                    ue.LogWarning("角色已处于受击状态，跳过受击动画")
+        except Exception as e:
+            import traceback
+            ue.LogError(f"处理伤害时出错: {str(e)}")
+            ue.LogError(traceback.format_exc())
+    
+    def _reset_hit_state(self):
+        """重置受击状态"""
+        self.OnHit = False
+        ue.LogWarning("受击状态已重置")
 
     # 委托（自定义事件）
     # 击杀敌数
@@ -1276,7 +1333,7 @@ class MyCharacter(ue.Character):
                     self._is_reloading = False
             except:
                 pass
-
+    
     # 以下是网络功能部分
     def _check_network_ready(self):
         """
