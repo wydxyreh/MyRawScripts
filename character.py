@@ -185,7 +185,7 @@ class MyCharacter(ue.Character):
                 montage_length = montage.GetPlayLength()
             except (AttributeError, TypeError):
                 montage_length = "未知"
-                
+            
             ue.LogWarning(f"[动画-{tag}] - 蒙太奇时长: {montage_length}")
             
             # 获取蒙太奇章节信息
@@ -223,7 +223,7 @@ class MyCharacter(ue.Character):
                                 anim_instance_name = anim_instance.GetName()
                             except (AttributeError, TypeError):
                                 anim_instance_name = "未知实例"
-                                
+                            
                             anim_instance_class = type(anim_instance).__name__
                             
                             try:
@@ -747,6 +747,7 @@ class MyCharacter(ue.Character):
     AllBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
     WeaopnBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
     KilledEnemies = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    KilledEnemiesReset = False
     
     def _on_take_any_damage(self, damaged_actor, damage, damage_type, instigated_by, damage_causer):
         """

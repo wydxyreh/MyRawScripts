@@ -33,6 +33,10 @@ class NetworkStatus:
 		self.is_network_initialized = False
 		self.is_connected = False
 		
+		# 登录存档
+		self.account = None
+		self.password = None
+
 		# 认证状态 - 匹配ClientEntity中的auth_status结构
 		self.auth_status = {
 			"is_authenticated": False,
@@ -297,7 +301,7 @@ def _process_network_internal():
 def _process_messages_internal():
 	"""内部处理消息队列的函数，由定时器调用"""
 	global network_status
-    
+	
 	if not network_status.client_entity:
 		return
 		
@@ -307,12 +311,12 @@ def _process_messages_internal():
 		
 	if not network_status.client_entity.pending_messages:
 		return
-        
+		
 	try:
 		# 批量处理消息
 		messages_to_process = network_status.client_entity.pending_messages.copy()
 		network_status.client_entity.pending_messages = []
-        
+		
 		for data in messages_to_process:
 			try:
 				ue.LogWarning(f"[网络] 处理接收到的消息：长度={len(data)}")
@@ -322,7 +326,7 @@ def _process_messages_internal():
 				import traceback
 				ue.LogError(f"[网络] 消息解析错误详情: {traceback.format_exc()}")
 				continue  # 继续处理下一条消息
-            
+			
 		# 从ClientEntity同步认证状态
 		if hasattr(network_status.client_entity, 'authenticated') and network_status.client_entity.authenticated:
 			# 检查是否刚刚完成登录
@@ -385,7 +389,7 @@ def _process_messages_internal():
 						network_status.load_status["in_progress"] = False
 						network_status.load_status["message"] = load_op.get("error_message", "数据加载失败")
 						on_load_failure(load_op.get("error_message", "未知错误"))
-        
+		
 	except Exception as e:
 		ue.LogError(f"[Network] 处理消息队列时出错: {str(e)}")
 		# 记录详细错误
@@ -769,10 +773,10 @@ def _calculate_data_hash(data):
 	"""计算数据的哈希值，用于检测数据变化"""
 	import hashlib
 	import json
-    
+	
 	if data is None:
 		return None
-        
+		
 	# 将数据转换为JSON字符串，然后计算哈希值
 	data_str = json.dumps(data, sort_keys=True)
 	return hashlib.md5(data_str.encode()).hexdigest()
@@ -782,12 +786,12 @@ def on_save_success():
 	"""保存成功的回调函数"""
 	global network_status
 	import time
-    
+	
 	network_status.save_status["in_progress"] = False
 	network_status.save_status["success"] = True
 	network_status.save_status["message"] = "数据保存成功"
 	network_status.save_status["timestamp"] = time.time()
-    
+	
 	# 记录详细的保存成功信息
 	ue.LogWarning(f"[数据] 用户 {network_status.auth_status['username']} 的数据保存成功!")
 	ue.LogWarning(f"[数据] 保存时间: {time.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -798,11 +802,11 @@ def on_save_success():
 def on_save_failure(error_message):
 	"""保存失败的回调函数"""
 	global network_status
-    
+	
 	network_status.save_status["in_progress"] = False
 	network_status.save_status["success"] = False
 	network_status.save_status["message"] = f"保存失败: {error_message}"
-    
+	
 	# 记录详细的保存失败信息
 	ue.LogError(f"[数据] 用户 {network_status.auth_status['username']} 的数据保存失败: {error_message}")
 
@@ -811,13 +815,13 @@ def on_load_success(data):
 	"""加载成功的回调函数"""
 	global network_status
 	import time
-    
+	
 	network_status.load_status["in_progress"] = False
 	network_status.load_status["success"] = True
 	network_status.load_status["message"] = "数据加载成功"
 	network_status.load_status["loaded_data"] = data
 	network_status.load_status["timestamp"] = time.time()
-    
+	
 	# 记录详细的加载成功信息
 	ue.LogWarning(f"[数据] 用户 {network_status.auth_status['username']} 的数据加载成功!")
 	ue.LogWarning(f"[数据] 加载时间: {time.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -827,11 +831,11 @@ def on_load_success(data):
 def on_load_failure(error_message):
 	"""加载失败的回调函数"""
 	global network_status
-    
+	
 	network_status.load_status["in_progress"] = False
 	network_status.load_status["success"] = False
 	network_status.load_status["message"] = f"加载失败: {error_message}"
-    
+	
 	# 记录详细的加载失败信息
 	ue.LogError(f"[数据] 用户 {network_status.auth_status['username']} 的数据加载失败: {error_message}")
 
