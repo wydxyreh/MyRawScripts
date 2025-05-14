@@ -139,17 +139,61 @@ class MyCharacter(ue.Character):
             bool: 是否成功开始播放
         """
         try:
+            # 记录函数开始执行
+            ue.LogWarning(f"[动画-{tag}] -------- 开始播放动画蒙太奇 --------")
+            ue.LogWarning(f"[动画-{tag}] 请求路径: {montage_path}")
+            ue.LogWarning(f"[动画-{tag}] 播放速率: {play_rate}, 起始节: '{start_section_name or '默认'}'")
+            
             # 检查主要角色网格体
             if not self.Mesh:
                 ue.LogError(f"[动画-{tag}] 无法获取角色网格体组件")
                 return False
             
             # 使用Character类的标准网格体组件
-            mesh_to_use = self.GetMesh() if hasattr(self, 'GetMesh') else self.Mesh
+            try:
+                mesh_to_use = self.GetMesh()
+            except (AttributeError, TypeError):
+                mesh_to_use = self.Mesh
             
             if not mesh_to_use:
                 ue.LogError(f"[动画-{tag}] 获取网格体组件失败")
                 return False
+            
+            # 打印网格体详细信息
+            try:
+                mesh_name = mesh_to_use.GetName()
+            except (AttributeError, TypeError):
+                mesh_name = "未知网格体"
+            
+            mesh_class = type(mesh_to_use).__name__
+            
+            try:
+                mesh_path = mesh_to_use.GetPathName()
+            except (AttributeError, TypeError):
+                mesh_path = "未知路径"
+            
+            ue.LogWarning(f"[动画-{tag}] 网格体信息:")
+            ue.LogWarning(f"[动画-{tag}] - 名称: {mesh_name}")
+            ue.LogWarning(f"[动画-{tag}] - 类型: {mesh_class}")
+            ue.LogWarning(f"[动画-{tag}] - 路径: {mesh_path}")
+            
+            # 打印角色信息
+            try:
+                char_name = self.GetName()
+            except (AttributeError, TypeError):
+                char_name = "未知角色"
+                
+            char_class = type(self).__name__
+            
+            try:
+                char_path = self.GetPathName()
+            except (AttributeError, TypeError):
+                char_path = "未知路径"
+                
+            ue.LogWarning(f"[动画-{tag}] 角色信息:")
+            ue.LogWarning(f"[动画-{tag}] - 名称: {char_name}")
+            ue.LogWarning(f"[动画-{tag}] - 类型: {char_class}")
+            ue.LogWarning(f"[动画-{tag}] - 路径: {char_path}")
             
             # 加载蒙太奇
             montage = ue.LoadObject(ue.AnimMontage, montage_path)
@@ -157,19 +201,146 @@ class MyCharacter(ue.Character):
                 ue.LogError(f"[动画-{tag}] 无法加载动画蒙太奇: {montage_path}")
                 return False
             
-            ue.LogWarning(f"[动画-{tag}] 已加载蒙太奇: {montage.GetName() if hasattr(montage, 'GetName') else montage_path}")
+            # 打印蒙太奇详细信息
+            try:
+                montage_name = montage.GetName()
+            except (AttributeError, TypeError):
+                montage_name = "未知蒙太奇"
+                
+            montage_class = type(montage).__name__
+            
+            try:
+                montage_full_path = montage.GetPathName()
+            except (AttributeError, TypeError):
+                montage_full_path = montage_path
+            
+            ue.LogWarning(f"[动画-{tag}] 蒙太奇信息:")
+            ue.LogWarning(f"[动画-{tag}] - 名称: {montage_name}")
+            ue.LogWarning(f"[动画-{tag}] - 类型: {montage_class}")
+            ue.LogWarning(f"[动画-{tag}] - 完整路径: {montage_full_path}")
+            
+            # 获取蒙太奇时长
+            try:
+                montage_length = montage.GetPlayLength()
+            except (AttributeError, TypeError):
+                montage_length = "未知"
+                
+            ue.LogWarning(f"[动画-{tag}] - 蒙太奇时长: {montage_length}")
+            
+            # 获取蒙太奇章节信息
+            try:
+                montage.GetSectionStartTime
+                ue.LogWarning(f"[动画-{tag}] - 蒙太奇章节信息:")
+                try:
+                    # 尝试获取蒙太奇所有章节
+                    try:
+                        section_names = montage.GetSectionNames()
+                        for section in section_names:
+                            section_start = montage.GetSectionStartTime(section)
+                            ue.LogWarning(f"[动画-{tag}]   * 章节: {section}, 开始时间: {section_start}秒")
+                    except (AttributeError, TypeError):
+                        pass
+                except Exception as section_ex:
+                    ue.LogWarning(f"[动画-{tag}] 获取章节信息失败: {str(section_ex)}")
+            except (AttributeError, TypeError):
+                pass
             
             # 优先使用Character类的PlayAnimMontage方法
-            if hasattr(self, 'PlayAnimMontage'):
+            try:
+                play_anim_montage_method = self.PlayAnimMontage
                 try:
-                    duration = self.PlayAnimMontage(montage, play_rate, start_section_name)
+                    ue.LogWarning(f"[动画-{tag}] 尝试使用Character.PlayAnimMontage方法...")
+                    duration = play_anim_montage_method(montage, play_rate, start_section_name)
                     if duration > 0:
                         ue.LogWarning(f"[动画-{tag}] 通过Character.PlayAnimMontage成功播放蒙太奇，持续时间: {duration}秒")
                         
                         # 获取动画实例以设置回调
                         anim_instance = mesh_to_use.GetAnimInstance()
                         if anim_instance:
+                            # 打印动画实例信息
+                            try:
+                                anim_instance_name = anim_instance.GetName()
+                            except (AttributeError, TypeError):
+                                anim_instance_name = "未知实例"
+                                
+                            anim_instance_class = type(anim_instance).__name__
+                            
+                            try:
+                                anim_instance_path = anim_instance.GetPathName()
+                            except (AttributeError, TypeError):
+                                anim_instance_path = "未知路径"
+                            
+                            ue.LogWarning(f"[动画-{tag}] 动画实例信息:")
+                            ue.LogWarning(f"[动画-{tag}] - 名称: {anim_instance_name}")
+                            ue.LogWarning(f"[动画-{tag}] - 类型: {anim_instance_class}")
+                            ue.LogWarning(f"[动画-{tag}] - 路径: {anim_instance_path}")
+                            
+                            # 获取骨骼信息
+                            try:
+                                skel_mesh_attr = getattr(mesh_to_use, 'SkeletalMesh', None)
+                                if skel_mesh_attr:
+                                    skel_mesh = mesh_to_use.SkeletalMesh
+                                    try:
+                                        skel_mesh_name = skel_mesh.GetName()
+                                    except (AttributeError, TypeError):
+                                        skel_mesh_name = "未知骨架网格体"
+                                        
+                                    try:
+                                        skel_mesh_path = skel_mesh.GetPathName()
+                                    except (AttributeError, TypeError):
+                                        skel_mesh_path = "未知路径"
+                                    
+                                    ue.LogWarning(f"[动画-{tag}] 骨骼网格体信息:")
+                                    ue.LogWarning(f"[动画-{tag}] - 名称: {skel_mesh_name}")
+                                    ue.LogWarning(f"[动画-{tag}] - 路径: {skel_mesh_path}")
+                                    
+                                    # 获取骨架信息
+                                    try:
+                                        skeleton_attr = getattr(skel_mesh, 'Skeleton', None)
+                                        if skeleton_attr:
+                                            skeleton = skel_mesh.Skeleton
+                                            try:
+                                                skeleton_name = skeleton.GetName()
+                                            except (AttributeError, TypeError):
+                                                skeleton_name = "未知骨架"
+                                                
+                                            try:
+                                                skeleton_path = skeleton.GetPathName()
+                                            except (AttributeError, TypeError):
+                                                skeleton_path = "未知路径"
+                                            
+                                            ue.LogWarning(f"[动画-{tag}] 骨架信息:")
+                                            ue.LogWarning(f"[动画-{tag}] - 名称: {skeleton_name}")
+                                            ue.LogWarning(f"[动画-{tag}] - 路径: {skeleton_path}")
+                                            
+                                            # 尝试获取骨骼数量
+                                            try:
+                                                get_bone_num_method = getattr(skeleton, 'GetBoneNum', None)
+                                                if get_bone_num_method:
+                                                    bone_count = skeleton.GetBoneNum()
+                                                    ue.LogWarning(f"[动画-{tag}] - 骨骼数量: {bone_count}")
+                                                    
+                                                    # 列出部分关键骨骼
+                                                    if bone_count > 0:
+                                                        try:
+                                                            get_bone_name_method = getattr(skeleton, 'GetBoneName', None)
+                                                            if get_bone_name_method:
+                                                                ue.LogWarning(f"[动画-{tag}] - 关键骨骼:")
+                                                                important_indices = [0, min(1, bone_count-1), min(bone_count//2, bone_count-1), bone_count-1]
+                                                                for idx in important_indices:
+                                                                    bone_name = skeleton.GetBoneName(idx)
+                                                                    ue.LogWarning(f"[动画-{tag}]   * 索引 {idx}: {bone_name}")
+                                                        except (AttributeError, TypeError):
+                                                            pass
+                                            except (AttributeError, TypeError):
+                                                pass
+                                    except (AttributeError, TypeError):
+                                        pass
+                            except (AttributeError, TypeError):
+                                pass
+                            
                             # 设置回调
+                            ue.LogWarning(f"[动画-{tag}] 设置动画完成回调...")
                             self._setup_animation_callbacks(anim_instance, montage, completion_callback, tag)
                         else:
                             # 如果无法获取动画实例，使用定时器作为备用
@@ -177,85 +348,181 @@ class MyCharacter(ue.Character):
                                 import threading
                                 timer = threading.Timer(duration / play_rate, completion_callback)
                                 timer.start()
-                                ue.LogWarning(f"[动画-{tag}] 使用定时器回调，将在{duration / play_rate}秒后调用")
+                                ue.LogWarning(f"[动画-{tag}] 无法获取动画实例，使用定时器回调，将在{duration / play_rate}秒后调用")
                                 
+                        ue.LogWarning(f"[动画-{tag}] 播放成功，预计持续时间: {duration / play_rate}秒")
                         return True
                 except Exception as e:
                     ue.LogWarning(f"[动画-{tag}] 通过Character.PlayAnimMontage播放失败: {e}，尝试其他方法")
+            except (AttributeError, TypeError):
+                ue.LogWarning(f"[动画-{tag}] Character类没有PlayAnimMontage方法，尝试其他方法")
             
             # 获取动画实例
-            # anim_instance = mesh_to_use.GetAnimInstance()
-            # if not anim_instance:
-            #     ue.LogError(f"[动画-{tag}] 无法获取动画实例")
-            #     return False
+            anim_instance = mesh_to_use.GetAnimInstance()
+            if not anim_instance:
+                ue.LogError(f"[动画-{tag}] 无法获取动画实例")
+                return False
                 
-            # anim_instance_class = type(anim_instance).__name__
-            # ue.LogWarning(f"[动画-{tag}] 动画实例类型: {anim_instance_class}")
+            # 打印动画实例详细信息
+            anim_instance_class = type(anim_instance).__name__
+            
+            try:
+                anim_instance_name = anim_instance.GetName()
+            except (AttributeError, TypeError):
+                anim_instance_name = "未知实例"
+                
+            try:
+                anim_instance_path = anim_instance.GetPathName()
+            except (AttributeError, TypeError):
+                anim_instance_path = "未知路径"
+            
+            ue.LogWarning(f"[动画-{tag}] 动画实例详细信息:")
+            ue.LogWarning(f"[动画-{tag}] - 名称: {anim_instance_name}")
+            ue.LogWarning(f"[动画-{tag}] - 类型: {anim_instance_class}")
+            ue.LogWarning(f"[动画-{tag}] - 路径: {anim_instance_path}")
+            
+            # 获取当前播放的其他蒙太奇
+            try:
+                get_current_active_montage_method = getattr(anim_instance, 'GetCurrentActiveMontage', None)
+                if get_current_active_montage_method:
+                    try:
+                        current_montage = anim_instance.GetCurrentActiveMontage()
+                        if current_montage:
+                            try:
+                                current_montage_name = current_montage.GetName()
+                            except (AttributeError, TypeError):
+                                current_montage_name = "未知蒙太奇"
+                            ue.LogWarning(f"[动画-{tag}] 当前活动蒙太奇: {current_montage_name}")
+                    except Exception as montage_ex:
+                        ue.LogWarning(f"[动画-{tag}] 获取当前蒙太奇失败: {str(montage_ex)}")
+            except (AttributeError, TypeError):
+                pass
             
             # 直接使用动画实例播放蒙太奇
-            # if hasattr(anim_instance, 'Montage_Play'):
-            #     # 检查是否有其他蒙太奇正在播放
-            #     if hasattr(anim_instance, 'Montage_IsPlaying') and anim_instance.Montage_IsPlaying(None):
-            #         if hasattr(anim_instance, 'Montage_Stop'):
-            #             anim_instance.Montage_Stop(0.25)  # 使用更平滑的混合时间
-            #             ue.LogWarning(f"[动画-{tag}] 停止其他正在播放的蒙太奇")
-                
-            #     # 播放蒙太奇并获取持续时间
-            #     montage_duration = anim_instance.Montage_Play(montage, play_rate)
-            
-            #     if montage_duration > 0:
-            #         # 如果指定了起始节，跳转到该节
-            #         if start_section_name and hasattr(anim_instance, 'Montage_JumpToSection'):
-            #             anim_instance.Montage_JumpToSection(start_section_name, montage)
-            #             ue.LogWarning(f"[动画-{tag}] 跳转到节: {start_section_name}")
+            # try:
+            #     montage_play_method = getattr(anim_instance, 'Montage_Play', None)
+            #     if montage_play_method:
+            #         ue.LogWarning(f"[动画-{tag}] 尝试使用动画实例的Montage_Play方法...")
                     
-            #         ue.LogWarning(f"[动画-{tag}] 动画蒙太奇播放成功，持续时间: {montage_duration}秒，播放速率: {play_rate}")
+            #         # 检查是否有其他蒙太奇正在播放
+            #         try:
+            #             montage_is_playing_method = getattr(anim_instance, 'Montage_IsPlaying', None)
+            #             if montage_is_playing_method and anim_instance.Montage_IsPlaying(None):
+            #                 try:
+            #                     montage_stop_method = getattr(anim_instance, 'Montage_Stop', None)
+            #                     if montage_stop_method:
+            #                         anim_instance.Montage_Stop(0.25)  # 使用更平滑的混合时间
+            #                         ue.LogWarning(f"[动画-{tag}] 停止其他正在播放的蒙太奇，混合时间: 0.25秒")
+            #                 except (AttributeError, TypeError):
+            #                     pass
+            #         except (AttributeError, TypeError):
+            #             pass
+                    
+            #         # 播放蒙太奇并获取持续时间
+            #         montage_duration = anim_instance.Montage_Play(montage, play_rate)
                 
-            #         # 设置回调
-            #         self._setup_animation_callbacks(anim_instance, montage, completion_callback, tag)
-            #         return True
+            #         if montage_duration > 0:
+            #             # 如果指定了起始节，跳转到该节
+            #             if start_section_name:
+            #                 try:
+            #                     montage_jump_to_section_method = getattr(anim_instance, 'Montage_JumpToSection', None)
+            #                     if montage_jump_to_section_method:
+            #                         anim_instance.Montage_JumpToSection(start_section_name, montage)
+            #                         ue.LogWarning(f"[动画-{tag}] 跳转到节: {start_section_name}")
+            #                 except (AttributeError, TypeError):
+            #                     pass
+                        
+            #             ue.LogWarning(f"[动画-{tag}] 动画蒙太奇播放成功，持续时间: {montage_duration}秒，播放速率: {play_rate}")
+                    
+            #             # 设置回调
+            #             ue.LogWarning(f"[动画-{tag}] 设置动画完成回调...")
+            #             self._setup_animation_callbacks(anim_instance, montage, completion_callback, tag)
+            #             ue.LogWarning(f"[动画-{tag}] 播放成功，预计持续时间: {montage_duration / play_rate}秒")
+            #             return True
+            #         else:
+            #             ue.LogError(f"[动画-{tag}] 动画蒙太奇播放失败，返回持续时间: {montage_duration}")
             #     else:
-            #         ue.LogError(f"[动画-{tag}] 动画蒙太奇播放失败，返回持续时间: {montage_duration}")
-            # else:
-            #     ue.LogWarning(f"[动画-{tag}] 动画实例 {anim_instance_class} 不支持 Montage_Play 方法，尝试备用播放方式")
+            #         ue.LogWarning(f"[动画-{tag}] 动画实例 {anim_instance_class} 不支持 Montage_Play 方法，尝试备用播放方式")
+            # except (AttributeError, TypeError):
+            #     ue.LogWarning(f"[动画-{tag}] 动画实例不支持Montage_Play方法，尝试备用播放方式")
             
             # 备选方案：尝试在动画实例中查找其他播放方法
             # if anim_instance:
+            #     ue.LogWarning(f"[动画-{tag}] 尝试其他播放方法...")
             #     animation_functions = ['PlayAnimMontage', 'PlayAnimation', 'PlayMontage']
+                
+            #     # 遍历实例的所有方法并打印
+            #     try:
+            #         dict_attr = getattr(anim_instance, '__dict__', None)
+            #         if dict_attr:
+            #             methods = [m for m in dir(anim_instance) if m.startswith('Play') and callable(getattr(anim_instance, m))]
+            #             ue.LogWarning(f"[动画-{tag}] 可用的播放方法: {methods}")
+            #     except (AttributeError, TypeError):
+            #         pass
+                
             #     for func_name in animation_functions:
-            #         if hasattr(anim_instance, func_name):
-            #             try:
-            #                 result = getattr(anim_instance, func_name)(montage, play_rate)
-            #                 ue.LogWarning(f"[动画-{tag}] 通过动画实例的 {func_name} 函数播放蒙太奇")
-                            
-            #                 # 设置完成回调
-            #                 if completion_callback:
-            #                     import threading
-            #                     animation_duration = montage.GetPlayLength() if hasattr(montage, 'GetPlayLength') else 1.5
-            #                     timer = threading.Timer(animation_duration / play_rate, completion_callback)
-            #                     timer.start()
-            #                     ue.LogWarning(f"[动画-{tag}] 使用定时器回调，将在{animation_duration / play_rate}秒后调用")
+            #         try:
+            #             func_attr = getattr(anim_instance, func_name, None)
+            #             if func_attr:
+            #                 try:
+            #                     ue.LogWarning(f"[动画-{tag}] 尝试使用动画实例的 {func_name} 方法...")
+            #                     result = getattr(anim_instance, func_name)(montage, play_rate)
+            #                     ue.LogWarning(f"[动画-{tag}] 通过动画实例的 {func_name} 函数播放蒙太奇，结果: {result}")
                                 
-            #                 return True
-            #             except Exception as func_ex:
-            #                 ue.LogWarning(f"[动画-{tag}] 调用动画实例的 {func_name} 函数失败: {func_ex}")
+            #                     # 设置完成回调
+            #                     if completion_callback:
+            #                         import threading
+            #                         try:
+            #                             get_play_length_method = getattr(montage, 'GetPlayLength', None)
+            #                             if get_play_length_method:
+            #                                 animation_duration = montage.GetPlayLength()
+            #                             else:
+            #                                 animation_duration = 1.5
+            #                         except (AttributeError, TypeError):
+            #                             animation_duration = 1.5
+                                        
+            #                         timer = threading.Timer(animation_duration / play_rate, completion_callback)
+            #                         timer.start()
+            #                         ue.LogWarning(f"[动画-{tag}] 使用定时器回调，将在{animation_duration / play_rate}秒后调用")
+                                    
+            #                     ue.LogWarning(f"[动画-{tag}] 播放成功")
+            #                     return True
+            #                 except Exception as func_ex:
+            #                     ue.LogWarning(f"[动画-{tag}] 调用动画实例的 {func_name} 函数失败: {func_ex}")
+            #         except (AttributeError, TypeError):
+            #             pass
             
             # 最后尝试使用网格体的PlayAnimation
-            # if hasattr(mesh_to_use, 'PlayAnimation'):
-            #     try:
-            #         mesh_to_use.PlayAnimation(montage, False)
-            #         ue.LogWarning(f"[动画-{tag}] 使用网格体的PlayAnimation方法播放动画")
-                    
-            #         # 设置定时器回调
-            #         if completion_callback:
-            #             import threading
-            #             animation_duration = montage.GetPlayLength() if hasattr(montage, 'GetPlayLength') else 1.5
-            #             timer = threading.Timer(animation_duration / play_rate, completion_callback)
-            #             timer.start()
-            #             ue.LogWarning(f"[动画-{tag}] 使用定时器回调，将在{animation_duration / play_rate}秒后调用")
-            #         return True
-            #     except Exception as anim_ex:
-            #         ue.LogWarning(f"[动画-{tag}] 使用网格体PlayAnimation播放失败: {anim_ex}")
+            # try:
+            #     play_animation_method = getattr(mesh_to_use, 'PlayAnimation', None)
+            #     if play_animation_method:
+            #         try:
+            #             ue.LogWarning(f"[动画-{tag}] 尝试使用网格体的PlayAnimation方法...")
+            #             mesh_to_use.PlayAnimation(montage, False)
+            #             ue.LogWarning(f"[动画-{tag}] 使用网格体的PlayAnimation方法播放动画成功")
+                        
+            #             # 设置定时器回调
+            #             if completion_callback:
+            #                 import threading
+            #                 try:
+            #                     get_play_length_method = getattr(montage, 'GetPlayLength', None)
+            #                     if get_play_length_method:
+            #                         animation_duration = montage.GetPlayLength()
+            #                     else:
+            #                         animation_duration = 1.5
+            #                 except (AttributeError, TypeError):
+            #                     animation_duration = 1.5
+                                
+            #                 timer = threading.Timer(animation_duration / play_rate, completion_callback)
+            #                 timer.start()
+            #                 ue.LogWarning(f"[动画-{tag}] 使用定时器回调，将在{animation_duration / play_rate}秒后调用")
+                        
+            #             ue.LogWarning(f"[动画-{tag}] 播放成功")
+            #             return True
+            #         except Exception as anim_ex:
+            #             ue.LogWarning(f"[动画-{tag}] 使用网格体PlayAnimation播放失败: {anim_ex}")
+            # except (AttributeError, TypeError):
+            #     pass
             
             # 如果所有方法都失败
             ue.LogError(f"[动画-{tag}] 所有播放方法均失败，无法播放蒙太奇")
