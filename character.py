@@ -1012,6 +1012,8 @@ class MyCharacter(ue.Character):
     CurrentHP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
     MaxEXP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
     CurrentEXP = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    MaxLevel = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
+    CurrentLevel = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
     AllBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
     WeaopnBulletNumber = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
     KilledEnemies = ue.uproperty(int, BlueprintReadWrite=True, Category="MyCharacter")
@@ -1069,9 +1071,49 @@ class MyCharacter(ue.Character):
         self.OnHit = False
         ue.LogWarning("受击状态已重置")
 
+    def _level_up(self):
+        """处理角色升级逻辑"""
+        try:
+            # 保存升级前的数据用于日志
+            old_level = self.CurrentLevel
+            old_max_hp = self.MaxHP
+            old_max_exp = self.MaxEXP
+            
+            # 增加等级
+            self.CurrentLevel += 1
+            
+            # 确保不超过最大等级
+            if self.CurrentLevel > self.MaxLevel:
+                self.CurrentLevel = self.MaxLevel
+                ue.LogWarning(f"已达到最大等级 {self.MaxLevel}，无法继续升级")
+                return
+            
+            # 升级后调整属性
+            # 每级增加20点最大生命值
+            self.MaxHP = 100 + (self.CurrentLevel - 1) * 20
+            # 当前生命值增加差值
+            self.CurrentHP += (self.MaxHP - old_max_hp)
+            
+            # 每级增加经验值上限
+            self.MaxEXP = 100 + (self.CurrentLevel - 1) * 50
+            
+            # 重置当前经验值为0
+            self.CurrentEXP = 0
+            
+            # 记录日志
+            ue.LogWarning(f"等级: {old_level} -> {self.CurrentLevel}")
+            ue.LogWarning(f"最大生命值: {old_max_hp} -> {self.MaxHP}")
+            ue.LogWarning(f"经验值上限: {old_max_exp} -> {self.MaxEXP}")
+            
+            # 这里可以添加升级特效或动画的触发代码
+            
+        except Exception as e:
+            import traceback
+            ue.LogError(f"角色升级时出错: {str(e)}")
+            ue.LogError(traceback.format_exc())
     # 委托（自定义事件）
     # 击杀敌数
-    GetKilled = ue.udelegate(BlueprintCallable=True, params=((int, 'KilledNumber'),))
+    GetKilled = ue.udelegate(BlueprintCallable=True, params=((int, 'KilledNumber'), (int, 'KilledExp')))
     # self.GetKilled.Broadcast(10)
     # 道具回复弹药
     ItemAddAmmunition = ue.udelegate(BlueprintCallable=True, params=((int, 'AddAmmunitionNums'),))
@@ -1082,10 +1124,19 @@ class MyCharacter(ue.Character):
     # 发射子弹
     FireBullet = ue.udelegate(BlueprintCallable=True, params=())
 
-    def AddKilledNumbers(self, killed_number):
+    def AddKilledNumbers(self, killed_number, killed_exp):
         """处理敌人击杀事件的回调函数"""
         self.KilledEnemies += killed_number
-        ue.LogWarning(f"KilledEnemies:{self.KilledEnemies}")
+        self.CurrentEXP += killed_exp
+        ue.LogWarning(f"KilledEnemies:{self.KilledEnemies}, 获得经验值:{killed_exp}")
+        
+        # 检查是否可以升级
+        if self.CurrentEXP >= self.MaxEXP and self.CurrentLevel < self.MaxLevel:
+            self._level_up()
+        
+        # 如果经验超过上限，截断到最大值
+        if self.CurrentEXP > self.MaxEXP:
+            self.CurrentEXP = self.MaxEXP
 
     def AddAmmunitionFromItem(self, add_ammunition_nums):
         """处理道具回复弹药事件的回调函数"""
@@ -1796,81 +1847,6 @@ class MyCharacter(ue.Character):
             return False
     
     @ue.ufunction(BlueprintCallable=True, Category="Network")
-    def _logout(self):
-        """从游戏服务器登出"""
-        try:
-            import ue_site
-            
-            success = ue_site.logout()
-            if success:
-                ue.LogWarning("正在尝试登出...")
-            else:
-                ue.LogError("登出请求发送失败")
-                
-            return success
-        except Exception as e:
-            ue.LogError(f"登出时出错: {str(e)}")
-            return False
-    
-    @ue.ufunction(BlueprintCallable=True, Category="Network")
-    def _save_user_data(self):
-        """保存用户数据到服务器"""
-        try:
-            import ue_site
-            import time
-            
-            # 创建要保存的数据
-            user_data = {
-                "player_name": "玩家角色",
-                "level": 10,
-                "health": 100,
-                "MaxHP": self.MaxHP,
-                "CurrentHP": self.CurrentHP,
-                "MaxEXP": self.MaxEXP,
-                "CurrentEXP": self.CurrentEXP,
-                "AllBulletNumber": self.AllBulletNumber,
-                "WeaopnBulletNumber": self.WeaopnBulletNumber,
-                "KilledEnemies": self.KilledEnemies,
-                "position": {
-                    "x": self.GetActorLocation().X,
-                    "y": self.GetActorLocation().Y,
-                    "z": self.GetActorLocation().Z
-                },
-                "timestamp": time.time()
-            }
-            
-            # 记录保存前的数据快照
-            self.last_saved_data = user_data.copy()
-            
-            success = ue_site.save_user_data(user_data)
-            if success:
-                ue.LogWarning(f"正在保存用户数据: {user_data}")
-            else:
-                ue.LogError("保存用户数据请求发送失败")
-                
-            return success
-        except Exception as e:
-            ue.LogError(f"保存用户数据时出错: {str(e)}")
-            return False
-    
-    @ue.ufunction(BlueprintCallable=True, Category="Network")
-    def _load_user_data(self):
-        """从服务器加载用户数据"""
-        try:
-            import ue_site
-            
-            success = ue_site.load_user_data()
-            if success:
-                ue.LogWarning("正在加载用户数据...")
-            else:
-                ue.LogError("加载用户数据请求发送失败")
-                
-            return success
-        except Exception as e:
-            ue.LogError(f"加载用户数据时出错: {str(e)}")
-            return False
-    
-    @ue.ufunction(BlueprintCallable=True, Category="Network")
     def _update_from_server_data(self):
         """从服务器数据更新角色属性"""
         try:
@@ -1958,12 +1934,26 @@ class MyCharacter(ue.Character):
                 except (TypeError, ValueError):
                     ue.LogWarning(f"[更新] 无法将弹匣值 '{user_data['WeaopnBulletNumber']}' 转换为整数，使用原值")
             
+            # 更新等级信息
+            if "MaxLevel" in user_data:
+                try:
+                    self.MaxLevel = int(user_data["MaxLevel"])
+                except (TypeError, ValueError):
+                    ue.LogWarning(f"[更新] 无法将MaxLevel值 '{user_data['MaxLevel']}' 转换为整数，使用原值")
+                    
+            if "CurrentLevel" in user_data:
+                try:
+                    self.CurrentLevel = int(user_data["CurrentLevel"])
+                except (TypeError, ValueError):
+                    ue.LogWarning(f"[更新] 无法将CurrentLevel值 '{user_data['CurrentLevel']}' 转换为整数，使用原值")
+            
             # 添加保存时间的检查和显示    
             save_time = user_data.get("save_time", "未知")
             
             ue.LogWarning(f"[更新] 从服务器更新角色数据:")
             ue.LogWarning(f"[更新] - 生命值: {self.CurrentHP}/{self.MaxHP}")
             ue.LogWarning(f"[更新] - 经验值: {self.CurrentEXP}/{self.MaxEXP}")
+            ue.LogWarning(f"[更新] - 等级: {self.CurrentLevel}/{self.MaxLevel}")
             ue.LogWarning(f"[更新] - 子弹从 {old_ammo} 更新为 {self.AllBulletNumber}")
             ue.LogWarning(f"[更新] - 弹匣从 {old_weapon_ammo} 更新为 {self.WeaopnBulletNumber}")
             ue.LogWarning(f"[更新] - 击杀敌人数: {self.KilledEnemies}")
@@ -2020,6 +2010,7 @@ class MyCharacter(ue.Character):
             ue.LogWarning(f"[保存] 当前角色状态:")
             ue.LogWarning(f"[保存] - 生命值: {self.CurrentHP}/{self.MaxHP}")
             ue.LogWarning(f"[保存] - 经验值: {self.CurrentEXP}/{self.MaxEXP}")
+            ue.LogWarning(f"[更新] - 等级: {self.CurrentLevel}/{self.MaxLevel}")
             ue.LogWarning(f"[保存] - 总弹药: {self.AllBulletNumber}")
             ue.LogWarning(f"[保存] - 当前弹匣: {self.WeaopnBulletNumber}")
             ue.LogWarning(f"[保存] - 击杀敌人数: {self.KilledEnemies}")
@@ -2228,6 +2219,10 @@ class MyCharacter(ue.Character):
         self.MaxEXP = 100
         self.CurrentEXP = 50
         
+        # 等级初始化
+        self.MaxLevel = 10
+        self.CurrentLevel = 1
+
         # 弹药数初始化
         self.AllBulletNumber = 100
         self.WeaopnBulletNumber = 10
@@ -2251,6 +2246,7 @@ class MyCharacter(ue.Character):
         ue.LogWarning(f"玩家属性初始化完成:")
         ue.LogWarning(f"- 生命值: {self.CurrentHP}/{self.MaxHP}")
         ue.LogWarning(f"- 经验值: {self.CurrentEXP}/{self.MaxEXP}")
+        ue.LogWarning(f"- 等级: {self.CurrentLevel}/{self.MaxLevel}")
         ue.LogWarning(f"- 总弹药: {self.AllBulletNumber}")
         ue.LogWarning(f"- 当前弹匣: {self.WeaopnBulletNumber}")
         ue.LogWarning(f"- 击杀敌人数: {self.KilledEnemies}")

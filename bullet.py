@@ -123,14 +123,25 @@ class CharacterBullet(Mybullet):
                 if not monster_died:
                     monster = other_actor
                     
-                    # 对Monster造成伤害和特效
-                    self._apply_damage_and_effect(monster, 8.0, sweep_result)
+                    # 计算考虑角色等级的伤害值
+                    base_damage = 8.0
+                    level_modifier = 0
                     
-                    # 添加向前的冲击力
-                    if hasattr(monster, 'CharacterMovement') and monster.CharacterMovement:
-                        impulse_strength = 500
-                        forward_vector = self.GetActorForwardVector()
-                        monster.CharacterMovement.AddImpulse(forward_vector * impulse_strength)
+                    # 获取发射该子弹的角色（Instigator）
+                    player_character = self.Instigator
+                    if player_character:
+                        # 获取角色的等级
+                        if hasattr(player_character, 'CurrentLevel'):
+                            # 每级增加1.5点伤害
+                            level_modifier = (player_character.CurrentLevel - 0) * 1.5
+                            ue.LogWarning(f"[CharacterBullet] 角色等级 {player_character.CurrentLevel}, 伤害加成 +{level_modifier:.1f}")
+                    
+                    # 计算最终伤害值（基础伤害 + 等级修正）
+                    final_damage = base_damage + level_modifier
+                    
+                    # 对Monster造成伤害和特效
+                    self._apply_damage_and_effect(monster, final_damage, sweep_result)
+                    
         except Exception as e:
             ue.LogWarning(f"[CharacterBullet] 处理重叠事件时出错: {e}")
             ue.LogWarning(traceback.format_exc())
