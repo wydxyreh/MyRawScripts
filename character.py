@@ -44,14 +44,14 @@ class MyCharacter(ue.Character):
             import traceback
             ue.LogError(f"执行换弹功能时出错: {str(e)}")
             ue.LogError(traceback.format_exc())
-            self._reset_reload_state()
+            self._reset_state("reload")
 
     def _play_reload_animation(self):
         """播放换弹动画（由_reload_weapon调用）"""
         montage_path = "/Game/Mannequin/Animations/My_Reload_Rifle_Hip_Montage.My_Reload_Rifle_Hip_Montage"
         if not self._play_animation_montage(montage_path, self._complete_reload, 1.0, "", "reload"):
             ue.LogError("[动画] 播放换弹动画失败")
-            self._reset_reload_state()
+            self._reset_state("reload")
     
     def _complete_reload(self, *args):
         """完成换弹操作，更新弹药数量
@@ -77,52 +77,13 @@ class MyCharacter(ue.Character):
             ue.LogWarning(f"换弹完成! 当前武器弹药: {self.WeaopnBulletNumber}/{self.MaxWeaponBulletNumber}, 剩余备用弹药: {self.AllBulletNumber}")
         
             # 重置换弹状态
-            self._reset_reload_state()
+            self._reset_state("reload")
         
         except Exception as e:
             import traceback
             ue.LogError(f"完成换弹操作时出错: {str(e)}")
             ue.LogError(traceback.format_exc())
-            self._reset_reload_state()
-
-    def _reset_reload_state(self):
-        """重置换弹相关状态"""
-        try:
-            # 获取换弹状态前的值，用于日志
-            prev_reload_state = getattr(self, '_is_reloading', False)
-        
-            # 安全地重置换弹状态
-            self._is_reloading = False
-            self.LockOrientation = False
-        
-            # 确保角色回到待机状态
-            if self.Mesh:
-                # 停止所有当前正在播放的蒙太奇
-                anim_instance = self.Mesh.GetAnimInstance()
-                if anim_instance:
-                    # 如果当前有蒙太奇在播放，停止它
-                    if hasattr(anim_instance, 'Montage_Stop'):
-                        # 使用短暂的混合时间平滑过渡
-                        blend_out_time = 0.25
-                        anim_instance.Montage_Stop(blend_out_time)
-                        ue.LogWarning(f"[动画] 停止所有蒙太奇，混合时间: {blend_out_time}秒")
-                    
-                    # 彻底清理所有回调
-                    self._clean_all_montage_callbacks(anim_instance)
-        
-            ue.LogWarning(f"[状态] 重置换弹状态: 从 {prev_reload_state} 变为 {self._is_reloading}")
-        except Exception as e:
-            # 捕获所有可能的异常，确保不会崩溃
-            import traceback
-            ue.LogError(f"[动画] 重置换弹状态时发生错误: {str(e)}")
-            ue.LogError(traceback.format_exc())
-        
-            # 尝试最基本的重置以防止卡住
-            try:
-                self._is_reloading = False
-                self.LockOrientation = False
-            except:
-                pass
+            self._reset_state("reload")
     
     def _play_animation_montage(self, montage_path, completion_callback, play_rate=1.0, start_section_name="", tag=""):
         """
@@ -523,7 +484,7 @@ class MyCharacter(ue.Character):
             #             ue.LogWarning(f"[动画-{tag}] 使用网格体PlayAnimation播放失败: {anim_ex}")
             # except (AttributeError, TypeError):
             #     pass
-            
+
             # 如果所有方法都失败
             ue.LogError(f"[动画-{tag}] 所有播放方法均失败，无法播放蒙太奇")
             return False
@@ -548,7 +509,7 @@ class MyCharacter(ue.Character):
             if self.Mesh:
                 anim_instance = self.Mesh.GetAnimInstance()
                 if anim_instance:
-                    # 使用新的清理函数移除所有回调
+                    # 使用清理函数移除所有回调
                     self._clean_all_montage_callbacks(anim_instance)
                         
             ue.LogWarning('角色退出游戏，已清理所有回调')
@@ -849,7 +810,7 @@ class MyCharacter(ue.Character):
             ue.LogWarning(f"发射子弹，剩余弹药: {self.WeaopnBulletNumber}")
             
             # 获取玩家控制器和相机方向
-            controller = self.GetWorld().GetPlayerController(0)  # 修复：使用GetPlayerController(0)替代GetFirstPlayerController
+            controller = self.GetWorld().GetPlayerController(0)
             if not controller:
                 ue.LogError("无法获取玩家控制器")
                 return False
@@ -1072,7 +1033,7 @@ class MyCharacter(ue.Character):
             import traceback
             ue.LogError(f"执行攻击功能时出错: {str(e)}")
             ue.LogError(traceback.format_exc())
-            self._reset_attack_state()
+            self._reset_state("attack")
     
     def _play_attack_animation(self):
         """播放攻击动画（该方法专门负责动画播放，由_attack_started调用）"""
@@ -1084,12 +1045,12 @@ class MyCharacter(ue.Character):
             ue.LogWarning("[动画] 触发发射子弹事件")
         
         # 播放攻击动画
-        if not self._play_animation_montage(montage_path, self._reset_attack_state, 1.0, "", "attack"):
+        if not self._play_animation_montage(montage_path, lambda: self._reset_state("attack"), 1.0, "", "attack"):
             ue.LogError("[动画] 播放攻击动画失败")
-            self._reset_attack_state()
+            self._reset_state("attack")
         
     def _setup_animation_callbacks(self, anim_instance, montage, completion_callback, callback_prefix=""):
-        """统一的动画回调设置函数，替代多个重复的回调设置函数
+        """统一的动画回调设置函数
         
         Args:
             anim_instance: 动画实例对象
@@ -1236,16 +1197,49 @@ class MyCharacter(ue.Character):
             ue.LogError(f"[动画清理] 清理所有回调时出错: {str(e)}")
             ue.LogError(traceback.format_exc())
     
-    def _reset_attack_state(self):
-        """重置攻击状态，在攻击动画结束时调用"""
+    def _reset_state(self, state_type="general"):
+        """统一的状态重置函数，替代多个重复的状态重置函数
+        
+        Args:
+            state_type: 状态类型，可以是 "attack", "reload" 或其他
+        """
         try:
-            # 获取攻击状态前的值，用于日志
-            prev_attack_state = self.AttackState
-        
-            # 安全地重置攻击状态
-            self.AttackState = False
-            self.LockOrientation = False
-        
+            # 根据状态类型设置不同的重置逻辑
+            if state_type == "attack":
+                # 获取攻击状态前的值，用于日志
+                prev_state = self.AttackState
+                
+                # 安全地重置攻击状态
+                self.AttackState = False
+                self.LockOrientation = False
+                
+                state_name = "攻击"
+                prev_state_value = prev_state
+                new_state_value = self.AttackState
+            
+            elif state_type == "reload":
+                # 获取换弹状态前的值，用于日志
+                prev_state = getattr(self, '_is_reloading', False)
+                
+                # 安全地重置换弹状态
+                self._is_reloading = False
+                self.LockOrientation = False
+                
+                state_name = "换弹"
+                prev_state_value = prev_state
+                new_state_value = self._is_reloading
+                
+            else:
+                # 通用状态重置
+                self.AttackState = False
+                self.LockOrientation = False
+                if hasattr(self, '_is_reloading'):
+                    self._is_reloading = False
+                
+                state_name = "通用"
+                prev_state_value = True  # 假设之前是活动状态
+                new_state_value = False
+            
             # 确保角色回到待机状态
             if self.Mesh:
                 # 停止所有当前正在播放的蒙太奇
@@ -1257,24 +1251,33 @@ class MyCharacter(ue.Character):
                         blend_out_time = 0.25
                         anim_instance.Montage_Stop(blend_out_time)
                         ue.LogWarning(f"[动画] 停止所有蒙太奇，混合时间: {blend_out_time}秒")
-                        
-                    # 彻底清理所有回调
-                    self._clean_all_montage_callbacks(anim_instance)
+                    
+                    # 可选：重置动画蓝图状态机变量
+                    if hasattr(anim_instance, 'SetVariableByName'):
+                        # 重置所有可能影响待机状态的变量
+                        anim_instance.SetVariableByName('bIsFalling', False)
+                        anim_instance.SetVariableByName('bIsAttacking', False)
+                        anim_instance.SetVariableByName('bIsInAir', False)
+                        ue.LogWarning("[动画] 重置动画蓝图状态机变量")
+            
+            ue.LogWarning(f"[状态] 重置{state_name}状态: 从 {prev_state_value} 变为 {new_state_value}")
         
-            ue.LogWarning(f"[状态] 重置攻击状态: 从 {prev_attack_state} 变为 {self.AttackState}")
         except Exception as e:
             # 捕获所有可能的异常，确保不会崩溃
             import traceback
-            ue.LogError(f"[动画] 重置攻击状态时发生错误: {str(e)}")
+            ue.LogError(f"[动画] 重置{state_name if 'state_name' in locals() else ''}状态时发生错误: {str(e)}")
             ue.LogError(traceback.format_exc())
-        
+            
             # 尝试最基本的重置以防止卡住
             try:
                 self.AttackState = False
                 self.LockOrientation = False
+                if hasattr(self, '_is_reloading'):
+                    self._is_reloading = False
             except:
                 pass
-    
+
+    # 以下是网络功能部分
     def _check_network_ready(self):
         """
         检查网络客户端是否已初始化并已连接到服务器
@@ -1790,7 +1793,6 @@ class MyCharacter(ue.Character):
                                     error_message = network_status.save_status["message"] or client_save_op.get("error_message", "未知错误")
                                     ue.LogError(f"[保存] ✗ 保存操作失败: {error_message}")
                                 
-                                ue.LogWarning("=================================")
                                 break
                         
                         ue.LogWarning(f"[保存] 等待保存操作完成... ({attempts}/{max_attempts})")
@@ -1806,20 +1808,17 @@ class MyCharacter(ue.Character):
                         if network_status.client_entity and hasattr(network_status.client_entity, 'data_operations'):
                             if "save" in network_status.client_entity.data_operations:
                                 network_status.client_entity.data_operations["save"]["pending"] = False
-                        ue.LogWarning("=================================")
                 
                 # 启动定时器线程
                 threading.Thread(target=check_save_result).start()
             else:
                 ue.LogError("[保存] 保存游戏数据请求发送失败")
-                ue.LogWarning("=================================")
                 
             return success
         except Exception as e:
             ue.LogError(f"[保存] 触发保存游戏数据时出错: {str(e)}")
             import traceback
             ue.LogError(f"[保存] 错误详情: {traceback.format_exc()}")
-            ue.LogWarning("=================================")
             return False
     
     @ue.ufunction(BlueprintCallable=True, Category="Network")
@@ -1905,7 +1904,6 @@ class MyCharacter(ue.Character):
                                     error_message = network_status.load_status["message"] or client_load_op.get("error_message", "未知错误")
                                     ue.LogError(f"[加载] ✗ 加载操作失败: {error_message}")
                                 
-                                ue.LogWarning("=================================")
                                 break
                         
                         ue.LogWarning(f"[加载] 等待加载操作完成... ({attempts}/{max_attempts})")
@@ -1921,20 +1919,17 @@ class MyCharacter(ue.Character):
                         if network_status.client_entity and hasattr(network_status.client_entity, 'data_operations'):
                             if "load" in network_status.client_entity.data_operations:
                                 network_status.client_entity.data_operations["load"]["pending"] = False
-                        ue.LogWarning("=================================")
                 
                 # 启动定时器线程
                 threading.Thread(target=check_load_result).start()
             else:
                 ue.LogError("[加载] 加载游戏数据请求发送失败")
-                ue.LogWarning("=================================")
                 
             return success
         except Exception as e:
             ue.LogError(f"[加载] 触发加载游戏数据时出错: {str(e)}")
             import traceback
             ue.LogError(f"[加载] 错误详情: {traceback.format_exc()}")
-            ue.LogWarning("=================================")
             return False
         
     @ue.ufunction(BlueprintCallable=True, Category="PlayerAttributes")
@@ -2018,11 +2013,9 @@ class MyCharacter(ue.Character):
     
     # 鼠标转向
     def _turn_right(self, value):
-        # self.AddControllerYawInput(value * 45 * ue.GetDeltaTime())
         self.AddControllerYawInput(value * self.MouseSpeed * ue.GetDeltaTime())
 
     def _look_up(self, value):
-        # self.AddControllerPitchInput(value * 45 * ue.GetDeltaTime())
         self.AddControllerPitchInput(value * self.MouseSpeed * ue.GetDeltaTime())
 
     # 跳跃
@@ -2075,95 +2068,3 @@ class MyCharacter(ue.Character):
             ue.LogWarning(f"移动速度从{old_speed}更改为{speed}")
         else:
             ue.LogError("无法找到CharacterMovement组件")
-    
-    def _reset_state(self, state_type="general"):
-        """统一的状态重置函数，替代多个重复的状态重置函数
-        
-        Args:
-            state_type: 状态类型，可以是 "attack", "reload" 或其他
-        """
-        try:
-            # 根据状态类型设置不同的重置逻辑
-            if state_type == "attack":
-                # 获取攻击状态前的值，用于日志
-                prev_state = self.AttackState
-                
-                # 安全地重置攻击状态
-                self.AttackState = False
-                self.LockOrientation = False
-                
-                state_name = "攻击"
-                prev_state_value = prev_state
-                new_state_value = self.AttackState
-            
-            elif state_type == "reload":
-                # 获取换弹状态前的值，用于日志
-                prev_state = getattr(self, '_is_reloading', False)
-                
-                # 安全地重置换弹状态
-                self._is_reloading = False
-                self.LockOrientation = False
-                
-                state_name = "换弹"
-                prev_state_value = prev_state
-                new_state_value = self._is_reloading
-                
-            else:
-                # 通用状态重置
-                self.AttackState = False
-                self.LockOrientation = False
-                if hasattr(self, '_is_reloading'):
-                    self._is_reloading = False
-                
-                state_name = "通用"
-                prev_state_value = True  # 假设之前是活动状态
-                new_state_value = False
-            
-            # 确保角色回到待机状态
-            if self.Mesh:
-                # 停止所有当前正在播放的蒙太奇
-                anim_instance = self.Mesh.GetAnimInstance()
-                if anim_instance:
-                    # 如果当前有蒙太奇在播放，停止它
-                    if hasattr(anim_instance, 'Montage_Stop'):
-                        # 使用短暂的混合时间平滑过渡
-                        blend_out_time = 0.25
-                        anim_instance.Montage_Stop(blend_out_time)
-                        ue.LogWarning(f"[动画] 停止所有蒙太奇，混合时间: {blend_out_time}秒")
-                    
-                    # 可选：重置动画蓝图状态机变量
-                    if hasattr(anim_instance, 'SetVariableByName'):
-                        # 重置所有可能影响待机状态的变量
-                        anim_instance.SetVariableByName('bIsFalling', False)
-                        anim_instance.SetVariableByName('bIsAttacking', False)
-                        anim_instance.SetVariableByName('bIsInAir', False)
-                        ue.LogWarning("[动画] 重置动画蓝图状态机变量")
-            
-            ue.LogWarning(f"[状态] 重置{state_name}状态: 从 {prev_state_value} 变为 {new_state_value}")
-        
-        except Exception as e:
-            # 捕获所有可能的异常，确保不会崩溃
-            import traceback
-            ue.LogError(f"[动画] 重置{state_name if 'state_name' in locals() else ''}状态时发生错误: {str(e)}")
-            ue.LogError(traceback.format_exc())
-            
-            # 尝试最基本的重置以防止卡住
-            try:
-                self.AttackState = False
-                self.LockOrientation = False
-                if hasattr(self, '_is_reloading'):
-                    self._is_reloading = False
-            except:
-                pass
-    
-    def _reset_reload_state(self):
-        """重置换弹相关状态 - 保持兼容性的包装函数"""
-        self._reset_state("reload")
-    
-    def _reset_attack_state(self, *args):
-        """重置攻击相关状态并确保角色回到待机状态 - 保持兼容性的包装函数
-        
-        参数:
-            *args: 可变参数列表，用于接收由蒙太奇回调传递的额外参数
-        """
-        self._reset_state("attack")

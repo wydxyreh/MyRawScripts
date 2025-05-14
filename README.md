@@ -65,8 +65,7 @@ Begin Object Class=/Script/Engine.SkeletalMeshComponent Name="CharacterMesh0" Ex
    RelativeRotation=(Pitch=0.000000,Yaw=-90.000000,Roll=0.000000)
 End Object
 
-目前代码中存在大量重名函数、一部分被定义了却没被用到、旧的函数，移除这些函数和代码
-
+目前C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\character.py代码中存在大量重名函数、一部分被定义了却没被用到、旧的函数，移除这些函数和代码
 
 UE客户端日志：
 射线命中目标点：<Vector_NetQuantize {X=710.579 Y=-1074.510 Z=130.239}>
