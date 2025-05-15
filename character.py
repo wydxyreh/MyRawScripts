@@ -954,7 +954,9 @@ class MyCharacter(ue.Character):
             "L": [(ue.EInputEvent.IE_Pressed, self._trigger_login)],
             "U": [(ue.EInputEvent.IE_Pressed, self._save_game_data)],
             "I": [(ue.EInputEvent.IE_Pressed, self._load_game_data)],
-            "LeftMouseButton": [(ue.EInputEvent.IE_Pressed, self._attack_started)]
+            "T": [(ue.EInputEvent.IE_Pressed, self._toggle_fire_mode)],
+            "LeftMouseButton": [(ue.EInputEvent.IE_Pressed, self._attack_started),
+                              (ue.EInputEvent.IE_Released, self._attack_ended)]
         }
         
         # 注册所有键绑定
@@ -1031,6 +1033,9 @@ class MyCharacter(ue.Character):
     OnHit = ue.uproperty(bool, BlueprintReadWrite=True, Category="MyCharacter")
     LockOrientation = ue.uproperty(bool, BlueprintReadWrite=True, Category="MyCharacter")
     AttackState = ue.uproperty(bool, BlueprintReadWrite=True, Category="MyCharacter")
+    IsAutoFireMode = ue.uproperty(bool, BlueprintReadWrite=True, Category="MyCharacter")
+    IsAutoFiring = ue.uproperty(bool, BlueprintReadWrite=True, Category="MyCharacter")
+    LastAutoFireTime = ue.uproperty(float, BlueprintReadWrite=True, Category="MyCharacter")
     
     # 额外添加几个动画蓝图可能需要的属性
     IsMoving = ue.uproperty(bool, BlueprintReadWrite=True, Category="Animation")
@@ -1286,11 +1291,21 @@ class MyCharacter(ue.Character):
             ue.LogError(traceback.format_exc())
             return False
     
-    @ue.ufunction(BlueprintCallable=True, Category="Combat")
+    def _toggle_fire_mode(self):
+        """切换射击模式（点射/连射）"""
+        self.IsAutoFireMode = not self.IsAutoFireMode
+        mode_name = "连射" if self.IsAutoFireMode else "点射"
+        ue.LogWarning(f"[射击模式] 切换为{mode_name}模式")
+        
+        # 如果当前正在连射，切换到点射模式时停止连射
+        if not self.IsAutoFireMode and self.IsAutoFiring:
+            self.IsAutoFiring = False
+            ue.LogWarning("[射击模式] 连射状态已停止")
+
     def _attack_started(self):
         """处理攻击开始事件，对应蓝图中的MyAttack输入动作的Started事件"""
         # 检查是否已经在攻击中，避免重复触发
-        if self.AttackState:
+        if self.AttackState and not self.IsAutoFireMode:
             ue.LogWarning("已经在攻击中，忽略新的攻击请求")
             return
         
@@ -1298,12 +1313,40 @@ class MyCharacter(ue.Character):
         if hasattr(self, '_is_reloading') and self._is_reloading:
             ue.LogWarning("正在换弹中，无法攻击")
             return
-            
-        # 设置攻击状态
+        
+        # 如果是连射模式，设置连射状态但不立即设置AttackState
+        # AttackState将由Tick函数中的连射逻辑来管理
+        if self.IsAutoFireMode:
+            self.IsAutoFiring = True
+            # 记录上次射击时间为0，确保Tick中立即触发第一发子弹
+            self.LastAutoFireTime = 0
+            ue.LogWarning("[射击] 开始连射模式")
+            # 锁定朝向，使角色不会随移动转向
+            self.LockOrientation = True
+            return
+        
+        # 点射模式直接设置攻击状态
         self.AttackState = True
         # 锁定朝向，使角色不会随移动转向
         self.LockOrientation = True
         
+        try:
+            # 计算射击方向并设置角色朝向
+            self._calculate_target_direction()
+            
+            # 只有在点射模式下才直接调用攻击动画播放函数
+            # 连射模式下，动画由MyCharacterTick处理
+            if not self.IsAutoFireMode:
+                self._play_attack_animation()
+                
+        except Exception as e:
+            import traceback
+            ue.LogError(f"执行攻击功能时出错: {str(e)}")
+            ue.LogError(traceback.format_exc())
+            self._reset_state("attack")
+            
+    def _calculate_target_direction(self):
+        """计算射击方向并设置角色朝向"""
         try:
             # 获取玩家控制器
             controller = self.GetWorld().GetPlayerController(0)
@@ -1399,20 +1442,13 @@ class MyCharacter(ue.Character):
             # 从方向向量计算旋转
             target_rotation = ue.KismetMathLibrary.MakeRotFromX(direction_vector)
             
-            ue.LogWarning(f"计算方向向量: {direction_vector}, 目标旋转: {target_rotation}")
-            
             # 设置角色朝向
             self.SetActorRotation(target_rotation, False)
             ue.LogWarning(f"设置角色旋转至：{target_rotation}")
-            
-            # 调用攻击动画播放函数
-            self._play_attack_animation()
-                
         except Exception as e:
             import traceback
-            ue.LogError(f"执行攻击功能时出错: {str(e)}")
+            ue.LogError(f"计算射击方向时出错: {str(e)}")
             ue.LogError(traceback.format_exc())
-            self._reset_state("attack")
     
     def _play_attack_animation(self):
         """播放攻击动画（该方法专门负责动画播放，由_attack_started调用）"""
@@ -1429,6 +1465,20 @@ class MyCharacter(ue.Character):
         if not self._play_animation_montage(montage_path, lambda: self._reset_state("attack"), 1.0, "", "attack"):
             ue.LogError("[动画] 播放攻击动画失败")
             self._reset_state("attack")
+            
+    def _attack_ended(self):
+        """处理攻击结束事件，对应鼠标左键释放"""
+        # 如果是连射模式，停止连射
+        if self.IsAutoFireMode and hasattr(self, 'IsAutoFiring') and self.IsAutoFiring:
+            self.IsAutoFiring = False
+            ue.LogWarning("[射击] 连射模式停止")
+            
+            # 如果当前不在攻击动画中，播放一次完整的攻击动画作为收尾
+            if not self.AttackState:
+                self.AttackState = True
+                self._play_attack_animation()
+        
+        # 点射模式无需额外处理，状态由动画完成回调重置
         
     def _setup_animation_callbacks(self, anim_instance, montage, completion_callback, callback_prefix=""):
         """统一的动画回调设置函数
@@ -2374,8 +2424,8 @@ class MyCharacter(ue.Character):
     def _jump(self):
         self.Jump()
 
-    @ue.ufunction(override=True)
-    def ReceiveTick(self, DeltaSeconds):
+    @ue.ufunction(BlueprintCallable=True, Category="Tick")
+    def MyCharacterTick(self):
         """接收Tick事件，相当于蓝图中的Event Tick节点"""
         # 检查角色是否移动 - 通过判断速度向量是否不为零
         velocity = self.GetVelocity()
@@ -2393,6 +2443,38 @@ class MyCharacter(ue.Character):
             
             # 设置角色朝向 - 相当于蓝图中的SetActorRotation节点
             self.SetActorRotation(new_rotation, False)
+            
+        # 处理连射模式逻辑
+        if self.IsAutoFireMode and hasattr(self, 'IsAutoFiring') and self.IsAutoFiring:
+            # 初始化LastAutoFireTime属性，如果不存在
+            if not hasattr(self, 'LastAutoFireTime'):
+                self.LastAutoFireTime = 0
+                
+            # 获取当前时间
+            current_time = ue.GameplayStatics.GetTimeSeconds(self)
+            
+            # 计算间隔时间（控制射速）
+            # 调整此值可以控制连射速度，值越小射速越快
+            fire_interval = 0.1  # 100ms间隔，约每秒10发
+            
+            # 检查是否可以发射下一发子弹
+            if current_time - self.LastAutoFireTime >= fire_interval:
+                # 更新上次射击时间
+                self.LastAutoFireTime = current_time
+                
+                # 每次发射前都重新计算目标方向，实时跟随鼠标
+                self._calculate_target_direction()
+                
+                # 检查弹药数量
+                if self.WeaopnBulletNumber <= 0:
+                    ue.LogWarning("[连射] 弹药耗尽，停止连射")
+                    self.IsAutoFiring = False
+                    return
+                
+                # 发射子弹和播放音效（不播放动画）
+                self._play_sound("/Game/Sounds/S_WEP_Fire_08.S_WEP_Fire_08")
+                self.FireBullet.Broadcast()
+                ue.LogWarning(f"[连射] 发射子弹，剩余弹药: {self.WeaopnBulletNumber}")
     
     # 奔跑功能
     def _run_start(self):

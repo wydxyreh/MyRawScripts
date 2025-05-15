@@ -842,4 +842,4 @@ C:/Users/wydx/Documents/Unreal Projects/ThirdPersonWithPy/Content/Sounds/S_WEP_R
 
 C:/Users/wydx/Documents/Unreal Projects/ThirdPersonWithPy/Content/Sounds/Borislav_Slavov_-_Song_Of_Balduran.uasset
 
-对于C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\character.py，在玩家LeftMouseButton按下时，做成两种模式，默认时点射，即每点一下鼠标左键，发射一次子弹，按下T键切换为连射，即按下鼠标左键，则子弹每隔0.2秒发射一次，如果左键不松开，则一直发射直到弹匣打空。
+对于C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\character.py，在玩家LeftMouseButton按下时，做成两种模式，默认时点射，即每点一下鼠标左键，发射一次子弹，按下T键切换为连射，即按下鼠标左键，就连续发射30发子弹，一直发射直到弹匣打空或左键松开。连射模式下，连续发射时，只重复音效和子弹生成，动画蒙太奇的播放，只在发射结束时才会播放一次，基于tick实现，MyCharacterTick函数中的内容即为tick事件执行的内容
