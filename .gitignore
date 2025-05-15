@@ -1,3 +1,5 @@
 __pycache__
 debuglib
 Lib
+server_data.db
+Logs

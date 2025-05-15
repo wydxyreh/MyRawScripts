@@ -658,6 +658,10 @@ class MyCharacter(ue.Character):
         if network_status:
             content = network_status.client_entity.get_recent_achievement_broadcast(False)
             
+            # 判断content是否为None
+            if content is None:
+                return ""
+            
             # 判断是否是自己的成就
             is_own_achievement = network_status.client_entity.username == content.username if hasattr(content, 'username') else content.get('is_own_achievement', False)
             ue.LogWarning(f"get_achievement_broadcast_content: {content}")
