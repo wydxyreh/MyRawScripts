@@ -1121,19 +1121,16 @@ class MyCharacter(ue.Character):
             self._reset_state("reload")
     
     def _play_reload_animation(self):
-        """播放换弹动画（由_reload_weapon调用）"""
-        montage_path = "/Game/Mannequin/Animations/My_Reload_Rifle_Hip_Montage.My_Reload_Rifle_Hip_Montage"
+            """播放换弹动画（由_reload_weapon调用）"""
+            montage_path = "/Game/Mannequin/Animations/My_Reload_Rifle_Hip_Montage.My_Reload_Rifle_Hip_Montage"
     
-        # 播放换弹音效
-        self._play_sound("/Game/Sounds/S_WEP_Rifle_Reload.S_WEP_Rifle_Reload")
+            # 播放换弹音效
+            self._play_sound("/Game/Sounds/S_WEP_Rifle_Reload.S_WEP_Rifle_Reload")
     
-    
-        # 播放换弹音效
-        self._play_sound("/Game/Sounds/S_WEP_Rifle_Reload.S_WEP_Rifle_Reload")
-    
-        if not self._play_animation_montage(montage_path, self._complete_reload, 1.0, "", "reload"):
-            ue.LogError("[动画] 播放换弹动画失败")
-            self._reset_state("reload")
+            # 播放换弹动画
+            if not self._play_animation_montage(montage_path, self._complete_reload, 1.0, "", "reload"):
+                ue.LogError("[动画] 播放换弹动画失败")
+                self._reset_state("reload")
     
     def _complete_reload(self, *args):
         """完成换弹操作，更新弹药数量
@@ -1141,6 +1138,8 @@ class MyCharacter(ue.Character):
         参数:
             *args: 可变参数列表，用于接收由蒙太奇回调传递的额外参数
         """
+        # 记录方法调用
+        ue.LogWarning("[换弹] 执行换弹完成操作")
         try:
             if not hasattr(self, '_is_reloading') or not self._is_reloading:
                 ue.LogWarning("尝试完成换弹，但当前不在换弹状态")
@@ -1440,135 +1439,9 @@ class MyCharacter(ue.Character):
                         ue.LogWarning(f"[动画-{tag}] 获取当前蒙太奇失败: {str(montage_ex)}")
             except (AttributeError, TypeError):
                 pass
-            
-            # 直接使用动画实例播放蒙太奇
-            # try:
-            #     montage_play_method = getattr(anim_instance, 'Montage_Play', None)
-            #     if montage_play_method:
-            #         ue.LogWarning(f"[动画-{tag}] 尝试使用动画实例的Montage_Play方法...")
-                    
-            #         # 检查是否有其他蒙太奇正在播放
-            #         try:
-            #             montage_is_playing_method = getattr(anim_instance, 'Montage_IsPlaying', None)
-            #             if montage_is_playing_method and anim_instance.Montage_IsPlaying(None):
-            #                 try:
-            #                     montage_stop_method = getattr(anim_instance, 'Montage_Stop', None)
-            #                     if montage_stop_method:
-            #                         anim_instance.Montage_Stop(0.25)  # 使用更平滑的混合时间
-            #                         ue.LogWarning(f"[动画-{tag}] 停止其他正在播放的蒙太奇，混合时间: 0.25秒")
-            #                 except (AttributeError, TypeError):
-            #                     pass
-            #         except (AttributeError, TypeError):
-            #             pass
-                    
-            #         # 播放蒙太奇并获取持续时间
-            #         montage_duration = anim_instance.Montage_Play(montage, play_rate)
-                
-            #         if montage_duration > 0:
-            #             # 如果指定了起始节，跳转到该节
-            #             if start_section_name:
-            #                 try:
-            #                     montage_jump_to_section_method = getattr(anim_instance, 'Montage_JumpToSection', None)
-            #                     if montage_jump_to_section_method:
-            #                         anim_instance.Montage_JumpToSection(start_section_name, montage)
-            #                         ue.LogWarning(f"[动画-{tag}] 跳转到节: {start_section_name}")
-            #                 except (AttributeError, TypeError):
-            #                     pass
-                        
-            #             ue.LogWarning(f"[动画-{tag}] 动画蒙太奇播放成功，持续时间: {montage_duration}秒，播放速率: {play_rate}")
-                    
-            #             # 设置回调
-            #             ue.LogWarning(f"[动画-{tag}] 设置动画完成回调...")
-            #             self._setup_animation_callbacks(anim_instance, montage, completion_callback, tag)
-            #             ue.LogWarning(f"[动画-{tag}] 播放成功，预计持续时间: {montage_duration / play_rate}秒")
-            #             return True
-            #         else:
-            #             ue.LogError(f"[动画-{tag}] 动画蒙太奇播放失败，返回持续时间: {montage_duration}")
-            #     else:
-            #         ue.LogWarning(f"[动画-{tag}] 动画实例 {anim_instance_class} 不支持 Montage_Play 方法，尝试备用播放方式")
-            # except (AttributeError, TypeError):
-            #     ue.LogWarning(f"[动画-{tag}] 动画实例不支持Montage_Play方法，尝试备用播放方式")
-            
-            # 备选方案：尝试在动画实例中查找其他播放方法
-            # if anim_instance:
-            #     ue.LogWarning(f"[动画-{tag}] 尝试其他播放方法...")
-            #     animation_functions = ['PlayAnimMontage', 'PlayAnimation', 'PlayMontage']
-                
-            #     # 遍历实例的所有方法并打印
-            #     try:
-            #         dict_attr = getattr(anim_instance, '__dict__', None)
-            #         if dict_attr:
-            #             methods = [m for m in dir(anim_instance) if m.startswith('Play') and callable(getattr(anim_instance, m))]
-            #             ue.LogWarning(f"[动画-{tag}] 可用的播放方法: {methods}")
-            #     except (AttributeError, TypeError):
-            #         pass
-                
-            #     for func_name in animation_functions:
-            #         try:
-            #             func_attr = getattr(anim_instance, func_name, None)
-            #             if func_attr:
-            #                 try:
-            #                     ue.LogWarning(f"[动画-{tag}] 尝试使用动画实例的 {func_name} 方法...")
-            #                     result = getattr(anim_instance, func_name)(montage, play_rate)
-            #                     ue.LogWarning(f"[动画-{tag}] 通过动画实例的 {func_name} 函数播放蒙太奇，结果: {result}")
-                                
-            #                     # 设置完成回调
-            #                     if completion_callback:
-            #                         import threading
-            #                         try:
-            #                             get_play_length_method = getattr(montage, 'GetPlayLength', None)
-            #                             if get_play_length_method:
-            #                                 animation_duration = montage.GetPlayLength()
-            #                             else:
-            #                                 animation_duration = 1.5
-            #                         except (AttributeError, TypeError):
-            #                             animation_duration = 1.5
-                                        
-            #                         timer = threading.Timer(animation_duration / play_rate, completion_callback)
-            #                         timer.start()
-            #                         ue.LogWarning(f"[动画-{tag}] 使用定时器回调，将在{animation_duration / play_rate}秒后调用")
-                                    
-            #                     ue.LogWarning(f"[动画-{tag}] 播放成功")
-            #                     return True
-            #                 except Exception as func_ex:
-            #                     ue.LogWarning(f"[动画-{tag}] 调用动画实例的 {func_name} 函数失败: {func_ex}")
-            #         except (AttributeError, TypeError):
-            #             pass
-            
-            # 最后尝试使用网格体的PlayAnimation
-            # try:
-            #     play_animation_method = getattr(mesh_to_use, 'PlayAnimation', None)
-            #     if play_animation_method:
-            #         try:
-            #             ue.LogWarning(f"[动画-{tag}] 尝试使用网格体的PlayAnimation方法...")
-            #             mesh_to_use.PlayAnimation(montage, False)
-            #             ue.LogWarning(f"[动画-{tag}] 使用网格体的PlayAnimation方法播放动画成功")
-                        
-            #             # 设置定时器回调
-            #             if completion_callback:
-            #                 import threading
-            #                 try:
-            #                     get_play_length_method = getattr(montage, 'GetPlayLength', None)
-            #                     if get_play_length_method:
-            #                         animation_duration = montage.GetPlayLength()
-            #                     else:
-            #                         animation_duration = 1.5
-            #                 except (AttributeError, TypeError):
-            #                     animation_duration = 1.5
-                                
-            #                 timer = threading.Timer(animation_duration / play_rate, completion_callback)
-            #                 timer.start()
-            #                 ue.LogWarning(f"[动画-{tag}] 使用定时器回调，将在{animation_duration / play_rate}秒后调用")
-                        
-            #             ue.LogWarning(f"[动画-{tag}] 播放成功")
-            #             return True
-            #         except Exception as anim_ex:
-            #             ue.LogWarning(f"[动画-{tag}] 使用网格体PlayAnimation播放失败: {anim_ex}")
-            # except (AttributeError, TypeError):
-            #     pass
 
             # 如果所有方法都失败
-            ue.LogError(f"[动画-{tag}] 所有播放方法均失败，无法播放蒙太奇")
+            ue.LogError(f"[动画-{tag}] 播放失败，无法播放蒙太奇")
             return False
                 
         except Exception as e:
@@ -1586,6 +1459,8 @@ class MyCharacter(ue.Character):
             completion_callback: 动画完成时调用的回调函数
             callback_prefix: 回调函数和属性名的前缀，用于区分不同类型的动画
         """
+        # 记录当前设置的回调函数，以便于后续可能需要手动调用
+        setattr(self, f"_current_{callback_prefix}_completion_callback", completion_callback)
         try:
             delegate_prefix = f"_{callback_prefix}_" if callback_prefix else "_"
             
@@ -1694,11 +1569,14 @@ class MyCharacter(ue.Character):
             anim_instance: 动画实例对象
         """
         try:
-            # 清理所有可能的回调类型
+             # 清理所有蒙太奇回调类型
             callback_types = ["blend_out", "ended", "started"]
             
             # 清理与不同前缀相关的所有回调
             prefixes = ["attack", "reload", ""]  # 包含空字符串以处理没有前缀的情况
+            
+            # 保存当前状态，以便可以在清理回调后恢复
+            is_reloading = getattr(self, '_is_reloading', False)
             
             # 直接移除所有委托，不依赖于属性检查
             if hasattr(anim_instance, 'OnMontageBlendingOut'):
@@ -1710,13 +1588,10 @@ class MyCharacter(ue.Character):
             if hasattr(anim_instance, 'OnMontageStarted'):
                 anim_instance.OnMontageStarted.Clear()
             
-            # 清除所有已保存的委托引用
-            for prefix in prefixes:
-                delegate_prefix = f"_{prefix}_" if prefix else "_"
-                for callback_type in callback_types:
-                    delegate_name = f"{delegate_prefix}{callback_type}_delegate"
-                    if hasattr(self, delegate_name):
-                        delattr(self, delegate_name)
+            # 如果正在换弹，则在清理回调后检查并调用换弹完成函数
+            if is_reloading:
+                ue.LogWarning("[动画清理] 检测到换弹回调被清理，手动触发换弹完成")
+                self._complete_reload()
             
             ue.LogWarning("[动画清理] 已清理所有蒙太奇回调")
                     
