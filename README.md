@@ -856,3 +856,9 @@ C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\ue_site.py
 C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\Network\sample_server.py
 C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\Network\sample_client.py
 在游戏json数据save、load时，函数调用和数据传递关系，修复其中存在的问题，以及去除其中的冗杂处理
+
+在C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\character.py中，提供一个函数，对于来自服务端的broadcast_achievement函数-客户端的achievement_broadcast函数进行对接，能够获取到
+ClientEntity.achievement_broadcast_received = False  # 标志位：是否接收到成就广播
+ClientEntity.last_achievement_broadcast = None  # 最近接收到的成就广播内容
+这两个参数（合理利用get_recent_achievement_broadcast函数），能够使得用户可以在接收到来自服务端的广播后，在游戏中将广播内容显示到游戏UI界面中，并持续3S
+

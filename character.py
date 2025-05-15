@@ -509,6 +509,42 @@ class MyCharacter(ue.Character):
         # 使用与动画蓝图尝试转换到的相同类型
         return '/Game/ThirdPersonCPP/Blueprints/MyCharacterBP.MyCharacterBP_C'
     
+    @ue.ufunction(BlueprintCallable=True, Category="Network", ret=bool)
+    def get_achievement_broadcast_status(self):
+        import ue_site
+        network_status = ue_site.network_status
+        if network_status:
+            return network_status.client_entity.has_new_achievement_broadcast()
+        return False
+    
+    @ue.ufunction(BlueprintCallable=True, Category="Network", params=bool)
+    def set_achievement_broadcast_status(self, clear_flag):
+        import ue_site
+        network_status = ue_site.network_status
+        if network_status:
+            network_status.client_entity.get_recent_achievement_broadcast(clear_flag)
+
+    @ue.ufunction(BlueprintCallable=True, Category="Network", ret=str)
+    def get_achievement_broadcast_content(self):
+        import ue_site
+        network_status = ue_site.network_status
+        if network_status:
+            content = network_status.client_entity.get_recent_achievement_broadcast(False)
+            
+            # 判断是否是自己的成就
+            is_own_achievement = network_status.client_entity.username == content.username if hasattr(content, 'username') else content.get('is_own_achievement', False)
+            ue.LogWarning(f"get_achievement_broadcast_content: {content}")
+            
+            # 构建显示信息
+            if is_own_achievement:
+                message = f"[成就] 恭喜! 您已达到 '{content.get('threshold_title', '')}' 成就! 击杀数: {content.get('threshold_value', 0)}"
+            else:
+                message = f"[系统公告] 玩家 {content.get('username', '未知')} 已达到 '{content.get('threshold_title', '')}' 成就! 击杀数: {content.get('threshold_value', 0)}"
+            
+            return message
+        else:
+            return ""
+
     # 添加EndPlay函数清理回调
     @ue.ufunction(override=True)
     def ReceiveEndPlay(self, EndPlayReason):
