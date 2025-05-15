@@ -862,3 +862,56 @@ ClientEntity.achievement_broadcast_received = False  # 标志位：是否接收�
 ClientEntity.last_achievement_broadcast = None  # 最近接收到的成就广播内容
 这两个参数（合理利用get_recent_achievement_broadcast函数），能够使得用户可以在接收到来自服务端的广播后，在游戏中将广播内容显示到游戏UI界面中，并持续3S
 
+
+参考下述代码，优化C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\character.py中对角色网格体的初始化函数
+
+class PyTPCharacter(ue.FindClass("Character")):
+
+	def __init__(self):
+		# 设置胶囊体组件的尺寸（胶囊体用于碰撞）
+		capsule_comp = self.CapsuleComponent
+		capsule_comp.CapsuleRadius = 42.0
+		capsule_comp.CapsuleHalfHeight = 96.0
+
+		# 此类自己拥有的属性为小写+下划线
+		self.base_turn_rate = 45.0
+		self.base_lookup_rate = 45.0
+
+		# 不使用Controller的旋转
+		self.bUseControllerRotationPitch = False
+		self.bUseControllerRotationYaw = False
+		self.bUseControllerRotationRoll = False
+
+		# 设置移动组件的属性
+		char_move_comp = self.CharacterMovement
+		# 始终朝向自己移动的方向
+		char_move_comp.bOrientRotationToMovement = True
+		char_move_comp.RotationRate = ue.Rotator(0.0, 540.0, 0.0)
+		char_move_comp.JumpZVelocity = 600.0
+		char_move_comp.AirControl = 0.2
+
+		# 注意！！
+		# AddActorComponent 里自带ReigsterComponent等需要操作
+		# 它的调用时机是在ReceiveBeginPlay里，若放到__init__会有异常
+		# 如果增加Component想放到__init__里，应该使用 CreateDefaultSubobject
+		self.camera_boom = self.CreateDefaultSubobject(ue.SpringArmComponent.Class(), "CameraBoom")
+		self.camera_boom.SetupAttachment(self.RootComponent)
+		self.camera_boom.TargetArmLength = 300.0
+		self.camera_boom.bUsePawnControlRotation = True
+
+		self.follow_camera = self.CreateDefaultSubobject(ue.CameraComponent.Class(), "FollowCamera")
+		self.follow_camera.SetupAttachment(self.camera_boom, 'SpringEndpoint')
+		self.follow_camera.bUsePawnControlRotation = False
+
+		# 设置Mesh资源
+		self.Mesh.SetSkeletalMesh(ue.LoadObject(ue.SkeletalMesh.Class(), '/Game/Mannequin/Character/Mesh/SK_Mannequin.SK_Mannequin'))
+
+		# 资源匹配胶囊体大小，适配朝向
+		self.Mesh.SetRelativeLocation(ue.Vector(0.0, 0.0, -97.0))
+		self.Mesh.SetRelativeRotation(ue.Rotator(0.0, 270, 0.0))
+
+		self.Mesh.AnimationMode = ue.EAnimationMode.AnimationBlueprint  # 使用动画蓝图
+		# 注意LoadClass参数的Path需要加上"_C"
+		anim_bp_class = ue.LoadClass('/Game/Mannequin/Animations/ThirdPerson_AnimBP.ThirdPerson_AnimBP_C')
+		# 设置Mesh使用的蓝图蓝图类具体是哪个
+		self.Mesh.SetAnimClass(anim_bp_class)

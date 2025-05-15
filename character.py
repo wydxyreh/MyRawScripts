@@ -53,11 +53,14 @@ class MyCharacter(ue.Character):
         # 导入protobuf
         import sys
         sys.path.append("C:\\Users\\wydx\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\site-packages")
+        
+        # 初始化网格体
+        self._initialize_mesh()
     
         # 创建战斗数据UI
         self._create_battle_ui()
     
-        # 初始化玩家属性和控制器
+        # 初始化玩家属性
         self._init_player_attributes()
     
         # 设置控制器
@@ -1798,7 +1801,7 @@ class MyCharacter(ue.Character):
             except:
                 pass
     
-    # 网关相关
+    # 网络相关
     def _check_network_ready(self):
         """
         检查网络客户端是否已初始化并已连接到服务器
@@ -2418,6 +2421,94 @@ class MyCharacter(ue.Character):
             ue.LogError(f"[加载] 错误详情: {traceback.format_exc()}")
             return False
     
+    def _initialize_mesh(self):
+        """
+        初始化角色网格体、动画蓝图和相关碰撞设置
+        基于UE标准第三人称角色模板优化实现
+        """
+        try:
+            ue.LogWarning("开始初始化角色网格体...")
+            
+            # 检查是否已有Mesh组件
+            if not self.Mesh:
+                ue.LogError("无法获取角色的Mesh组件，初始化失败")
+                return False
+                
+            # 加载骨骼网格体资源 
+            # 直接使用SetSkeletalMesh方法设置网格体，提高API兼容性
+            skeletal_mesh = ue.LoadObject(ue.SkeletalMesh, "/Game/Mannequin/Character/Mesh/SK_Mannequin")
+            if not skeletal_mesh:
+                ue.LogError("无法加载骨骼网格体: SK_Mannequin")
+                return False
+            
+            # 设置骨骼网格体
+            if hasattr(self.Mesh, 'SetSkeletalMesh'):
+                self.Mesh.SetSkeletalMesh(skeletal_mesh)
+            else:
+                self.Mesh.SkeletalMesh = skeletal_mesh
+                
+            # 设置网格体位置和旋转 - 基于标准模板的最佳实践值
+            self.Mesh.SetRelativeLocation(ue.Vector(0.0, 0.0, -97.0))  # 调整为-97.0以更好地匹配胶囊体
+            self.Mesh.SetRelativeRotation(ue.Rotator(0.0, 270.0, 0.0))  # 使用270度使角色朝向正确
+            self.Mesh.bVisible = True
+                
+            # 设置动画蓝图 - 使用明确的动画模式设置
+            self.Mesh.AnimationMode = ue.EAnimationMode.AnimationBlueprint
+            
+            # 加载动画蓝图类 - 确保路径后面有"_C"后缀
+            anim_bp_path = "/Game/ThirdPersonCPP/Blueprints/AnimeBP/MyCharacterAnimBlueprint.MyCharacterAnimBlueprint_C"
+            anim_class = ue.LoadClass(anim_bp_path)
+            if not anim_class:
+                # 尝试使用模板默认动画蓝图作为备选
+                backup_anim_bp_path = "/Game/Mannequin/Animations/ThirdPerson_AnimBP.ThirdPerson_AnimBP_C"
+                anim_class = ue.LoadClass(backup_anim_bp_path)
+                if not anim_class:
+                    ue.LogError("无法加载动画蓝图类")
+                    return False
+                else:
+                    ue.LogWarning(f"使用备选动画蓝图: {backup_anim_bp_path}")
+            
+            # 设置动画类，优先使用SetAnimClass方法
+            if hasattr(self.Mesh, 'SetAnimClass'):
+                self.Mesh.SetAnimClass(anim_class)
+            else:
+                self.Mesh.AnimClass = anim_class
+            
+            # 设置网格体碰撞属性 - 简化碰撞设置，使用设置碰撞配置文件代替单独设置
+            if hasattr(self.Mesh, 'SetCollisionProfileName'):
+                # 使用预定义的角色网格体碰撞配置文件
+                self.Mesh.SetCollisionProfileName("CharacterMesh")
+            else:
+                self.Mesh.CollisionProfileName = "CharacterMesh"
+            
+            # 确保网格体可见并正确渲染
+            self.Mesh.bVisibleInRayTracing = True
+            
+            # 设置动画始终运行，不因可见性而暂停
+            if hasattr(self.Mesh, 'VisibilityBasedAnimTickOption'):
+                self.Mesh.VisibilityBasedAnimTickOption = ue.EVisibilityBasedAnimTickOption.AlwaysTickPose
+            
+            # 设置胶囊体和角色移动组件的属性，确保与网格体匹配
+            # 调整胶囊体大小以匹配模型
+            if hasattr(self, 'CapsuleComponent'):
+                self.CapsuleComponent.CapsuleRadius = 42.0
+                self.CapsuleComponent.CapsuleHalfHeight = 96.0
+            
+            # 配置角色移动组件
+            if hasattr(self, 'CharacterMovement'):
+                # 确保角色朝向移动方向
+                self.CharacterMovement.bOrientRotationToMovement = True
+                self.CharacterMovement.RotationRate = ue.Rotator(0.0, 540.0, 0.0)
+            
+            ue.LogWarning("角色网格体初始化完成!")
+            return True
+            
+        except Exception as e:
+            import traceback
+            ue.LogError(f"初始化角色网格体时出错: {str(e)}")
+            ue.LogError(traceback.format_exc())
+            return False
+            
     @ue.ufunction(BlueprintCallable=True, Category="PlayerAttributes")
     def _init_player_attributes(self):
         """
