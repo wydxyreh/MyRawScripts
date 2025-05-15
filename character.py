@@ -53,6 +53,10 @@ class MyCharacter(ue.Character):
         # 播放换弹音效
         self._play_sound("/Game/Sounds/S_WEP_Rifle_Reload.S_WEP_Rifle_Reload")
     
+    
+        # 播放换弹音效
+        self._play_sound("/Game/Sounds/S_WEP_Rifle_Reload.S_WEP_Rifle_Reload")
+    
         if not self._play_animation_montage(montage_path, self._complete_reload, 1.0, "", "reload"):
             ue.LogError("[动画] 播放换弹动画失败")
             self._reset_state("reload")
@@ -1472,8 +1476,11 @@ class MyCharacter(ue.Character):
         if self.WeaopnBulletNumber > 0:
             # 播放射击音效
             self._play_sound("/Game/Sounds/S_WEP_Fire_08.S_WEP_Fire_08")
+            # 播放射击音效
+            self._play_sound("/Game/Sounds/S_WEP_Fire_08.S_WEP_Fire_08")
             self.FireBullet.Broadcast()
             ue.LogWarning("[动画] 触发发射子弹事件")
+    
     
         # 播放攻击动画
         if not self._play_animation_montage(montage_path, lambda: self._reset_state("attack"), 1.0, "", "attack"):
