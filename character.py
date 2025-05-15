@@ -99,16 +99,16 @@ class MyCharacter(ue.Character):
         
         # 处理角色朝向
         # 如果处于攻击状态或连射状态，保持朝向鼠标位置
-        if self.LockOrientation and (self.AttackState or (hasattr(self, 'IsAutoFiring') and self.IsAutoFiring)):
-            # 在Tick中每帧更新一次角色朝向鼠标，确保实时跟随鼠标移动
-            self._calculate_target_direction()
-        # 否则根据移动方向调整朝向
-        elif velocity != ue.Vector(0, 0, 0) and not self.LockOrientation:
-            # 将速度向量转换为旋转值 - 相当于蓝图中的Conv_VectorToRotator节点
-            new_rotation = ue.KismetMathLibrary.MakeRotFromX(velocity)
+        # if self.LockOrientation and (self.AttackState or (hasattr(self, 'IsAutoFiring') and self.IsAutoFiring)):
+        #     # 在Tick中每帧更新一次角色朝向鼠标，确保实时跟随鼠标移动
+        #     self._calculate_target_direction()
+        # # 否则根据移动方向调整朝向
+        # elif velocity != ue.Vector(0, 0, 0) and not self.LockOrientation:
+        #     # 将速度向量转换为旋转值 - 相当于蓝图中的Conv_VectorToRotator节点
+        #     new_rotation = ue.KismetMathLibrary.MakeRotFromX(velocity)
             
-            # 设置角色朝向 - 相当于蓝图中的SetActorRotation节点
-            self.SetActorRotation(new_rotation, False)
+        #     # 设置角色朝向 - 相当于蓝图中的SetActorRotation节点
+        #     self.SetActorRotation(new_rotation, False)
             
         # 处理连射模式逻辑
         if self.IsAutoFireMode and hasattr(self, 'IsAutoFiring') and self.IsAutoFiring:
@@ -2498,7 +2498,20 @@ class MyCharacter(ue.Character):
                 ue.LogError("无法找到CharacterMovement组件")
     
     def _jump(self):
+        """
+        处理跳跃逻辑，跳跃时临时关闭朝向运动的旋转，跳跃完成后恢复
+        """
+        # 保存当前朝向运动的状态
+        self._previous_orient_to_movement = self.CharacterMovement.bOrientRotationToMovement
+        
+        # 跳跃时临时关闭朝向运动
+        self.CharacterMovement.bOrientRotationToMovement = False
+        ue.LogWarning("[跳跃] 开始跳跃，临时关闭朝向运动")
+        
+        # 调用基类跳跃方法
         self.Jump()
+        
+        self.CharacterMovement.bOrientRotationToMovement = True
     
     # 音乐音效相关
     def _play_sound(self, sound_path):
