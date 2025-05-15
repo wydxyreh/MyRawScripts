@@ -1278,6 +1278,7 @@ class MyCharacter(ue.Character):
             
             # 检查是否有武器引用
             if hasattr(self, 'weapon') and self.weapon:
+                # 使用当前角色朝向作为子弹发射方向
                 self.weapon.fire()  # 传递角色引用给fire函数
                 return True
             else:
@@ -1313,6 +1314,17 @@ class MyCharacter(ue.Character):
         if hasattr(self, '_is_reloading') and self._is_reloading:
             ue.LogWarning("正在换弹中，无法攻击")
             return
+            
+        # 检查是否在移动或跑步中，如果是则不允许攻击
+        velocity = self.GetVelocity()
+        speed = velocity.Size()
+        if speed > 10.0:  # 角色正在移动
+            ue.LogWarning("移动或跑步中，无法攻击")
+            return
+        
+        # 首先更新一下朝向，无论什么模式，确保角色立即朝向鼠标位置
+        self._calculate_target_direction()
+        ue.LogWarning("[攻击] 立即转向鼠标指向的方位")
         
         # 如果是连射模式，设置连射状态但不立即设置AttackState
         # AttackState将由Tick函数中的连射逻辑来管理
@@ -1321,19 +1333,16 @@ class MyCharacter(ue.Character):
             # 记录上次射击时间为0，确保Tick中立即触发第一发子弹
             self.LastAutoFireTime = 0
             ue.LogWarning("[射击] 开始连射模式")
-            # 锁定朝向，使角色不会随移动转向
+            # 设置特殊的锁定朝向标志，但允许朝向更新为鼠标方向
             self.LockOrientation = True
             return
         
         # 点射模式直接设置攻击状态
         self.AttackState = True
-        # 锁定朝向，使角色不会随移动转向
+        # 设置特殊的锁定朝向标志，但允许朝向更新为鼠标方向
         self.LockOrientation = True
         
         try:
-            # 计算射击方向并设置角色朝向
-            self._calculate_target_direction()
-            
             # 只有在点射模式下才直接调用攻击动画播放函数
             # 连射模式下，动画由MyCharacterTick处理
             if not self.IsAutoFireMode:
@@ -1453,6 +1462,11 @@ class MyCharacter(ue.Character):
     def _play_attack_animation(self):
         """播放攻击动画（该方法专门负责动画播放，由_attack_started调用）"""
         montage_path = "/Game/Mannequin/Animations/My_Fire_Rifle_Hip_Montage.My_Fire_Rifle_Hip_Montage"
+    
+        # 在每次点射攻击前重新获取鼠标位置并更新角色朝向
+        # 这确保即使点射模式下，每次点击也会根据最新的鼠标位置更新角色朝向
+        self._calculate_target_direction()
+        ue.LogWarning("[点射] 更新角色朝向到最新鼠标位置")
     
         # 播放前触发发射子弹事件
         if self.WeaopnBulletNumber > 0:
@@ -2353,8 +2367,8 @@ class MyCharacter(ue.Character):
         self.CurrentLevel = 1
 
         # 弹药数初始化
-        self.AllBulletNumber = 100
-        self.WeaopnBulletNumber = 10
+        self.AllBulletNumber = 300
+        self.WeaopnBulletNumber = 30
         
         # 击杀敌人数初始化
         self.KilledEnemies = 0
@@ -2436,8 +2450,13 @@ class MyCharacter(ue.Character):
         self.IsMoving = speed > 10.0  # 如果速度大于10，认为在移动
         self.IsIdle = not self.IsMoving and not self.AttackState and not self.OnHit and not self.Died
         
-        # 如果速度不为零并且LockOrientation为false，则根据移动方向设置角色旋转
-        if velocity != ue.Vector(0, 0, 0) and not self.LockOrientation:
+        # 处理角色朝向
+        # 如果处于攻击状态或连射状态，保持朝向鼠标位置
+        if self.LockOrientation and (self.AttackState or (hasattr(self, 'IsAutoFiring') and self.IsAutoFiring)):
+            # 在Tick中每帧更新一次角色朝向鼠标，确保实时跟随鼠标移动
+            self._calculate_target_direction()
+        # 否则根据移动方向调整朝向
+        elif velocity != ue.Vector(0, 0, 0) and not self.LockOrientation:
             # 将速度向量转换为旋转值 - 相当于蓝图中的Conv_VectorToRotator节点
             new_rotation = ue.KismetMathLibrary.MakeRotFromX(velocity)
             
@@ -2450,6 +2469,15 @@ class MyCharacter(ue.Character):
             if not hasattr(self, 'LastAutoFireTime'):
                 self.LastAutoFireTime = 0
                 
+            # 检查是否在移动或跑步，如果是，则停止连射
+            if self.IsMoving:
+                ue.LogWarning("[连射] 开始移动，停止连射")
+                self.IsAutoFiring = False
+                return
+            
+            # 连射过程中，每帧都更新角色朝向，确保角色实时跟随鼠标移动
+            self._calculate_target_direction()
+                
             # 获取当前时间
             current_time = ue.GameplayStatics.GetTimeSeconds(self)
             
@@ -2461,9 +2489,6 @@ class MyCharacter(ue.Character):
             if current_time - self.LastAutoFireTime >= fire_interval:
                 # 更新上次射击时间
                 self.LastAutoFireTime = current_time
-                
-                # 每次发射前都重新计算目标方向，实时跟随鼠标
-                self._calculate_target_direction()
                 
                 # 检查弹药数量
                 if self.WeaopnBulletNumber <= 0:
