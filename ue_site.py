@@ -3,7 +3,6 @@
 # ThirdPersonWithPy样例入口模块
 # 包含了不关编辑器更新脚本逻辑的功能, 我们称之为hot reload(见release_post_game_modules和hold_pre_game_modules_name)
 
-
 import sys
 import ue
 import threading
@@ -13,8 +12,6 @@ import time
 
 # 导入网络客户端模块所需的依赖
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "Network"))
-
-import sys
 
 # 全局网络状态单例（确保只有一个状态源）
 class NetworkStatus:
@@ -116,7 +113,6 @@ def on_init():
 def on_shutdown():
 	'''此函数会在NEPY插件初始化（ShutdownModule）时调用。可用于进行一些清理工作。'''
 
-
 def on_post_engine_init():
 	'''此函数是可选函数。如果定义了此函数，则会在引擎初始化完毕（OnPostEngineInit）时调用。回调时机晚于on_init'''
 	# 为了启动编辑器的时候识别出在Python定义的类(subclassing), 需要在这里import
@@ -137,12 +133,10 @@ def on_post_engine_init():
 		else:
 			ue.LogWarning("[网络] 引擎初始化时连接服务器失败，游戏中可通过按L键重试")
 
-
 def on_tick(delta_secodes: float):
 	'''此函数是可选函数。如果定义了此函数，则会在每帧Tick的时候调用。'''
 	# 处理网络事件
 	process_network_events()
-
 
 def on_debug_input(cmd_str: str) -> bool:
 	'''此函数是可选函数。如果定义了此函数，则当用户在PythonConsole中输入指令时，会首先回调到该函数。此函数可用于制作复杂的GM指令逻辑。返回值的含义是用户是否已自行处理了命令，若返回False，则PythonConsole会继续eval用户命令。'''
@@ -658,7 +652,7 @@ def is_authenticated():
 		network_status.auth_status["is_authenticated"] = network_status.client_entity.authenticated
 		
 	return network_status.auth_status["is_authenticated"]
-	
+
 def get_auth_status():
 	"""获取当前认证状态详情
 	
@@ -673,7 +667,7 @@ def get_auth_status():
 		
 	# 返回完整认证状态信息
 	return network_status.auth_status
-	
+
 # 回调函数: 在登录成功时被调用
 def on_login_success(token):
 	"""登录成功的回调函数，由ClientEntity调用
@@ -818,8 +812,6 @@ def on_load_failure(error_message):
 	
 	# 记录详细的加载失败信息
 	ue.LogError(f"[数据] 用户 {network_status.auth_status['username']} 的数据加载失败: {error_message}")
-
-# 删除重复的回调函数定义，上面已经定义过相同功能的函数
 
 # 下面的接口调用时机比on_post_engine_init要晚
 # 将ProjectSettings里的GameInstanceClass设置为NePyGameInstance，下面的接口才会被回调。
