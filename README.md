@@ -847,3 +847,12 @@ C:/Users/wydx/Documents/Unreal Projects/ThirdPersonWithPy/Content/Sounds/Borisla
 在C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\character.py中，攻击时，无论是点射还是连射，攻击时，角色转向和攻击方向都要立刻转向鼠标的方位
 
 移动、跑步时，不允许攻击，但是可以换弹
+
+对C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\character.py中，_load_game_data函数调用时，不是_save_game_data
+
+检查核实：
+C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\character.py
+C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\ue_site.py
+C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\Network\sample_server.py
+C:\Users\wydx\Documents\Unreal Projects\ThirdPersonWithPy\RawScripts\Network\sample_client.py
+在游戏json数据save、load时，函数调用和数据传递关系，修复其中存在的问题，以及去除其中的冗杂处理
