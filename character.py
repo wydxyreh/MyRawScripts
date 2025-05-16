@@ -94,22 +94,24 @@ class MyCharacter(ue.Character):
         # 更新动画相关属性
         speed = velocity.Size()
         self.MoveSpeed = speed
+        old_is_moving = self.IsMoving if hasattr(self, 'IsMoving') else False
         self.IsMoving = speed > 10.0  # 如果速度大于10，认为在移动
         self.IsIdle = not self.IsMoving and not self.AttackState and not self.OnHit and not self.Died
         
-        # 处理角色朝向
-        # 如果处于攻击状态或连射状态，保持朝向鼠标位置
-        # if self.LockOrientation and (self.AttackState or (hasattr(self, 'IsAutoFiring') and self.IsAutoFiring)):
-        #     # 在Tick中每帧更新一次角色朝向鼠标，确保实时跟随鼠标移动
-        #     self._calculate_target_direction()
-        # # 否则根据移动方向调整朝向
-        # elif velocity != ue.Vector(0, 0, 0) and not self.LockOrientation:
-        #     # 将速度向量转换为旋转值 - 相当于蓝图中的Conv_VectorToRotator节点
-        #     new_rotation = ue.KismetMathLibrary.MakeRotFromX(velocity)
-            
-        #     # 设置角色朝向 - 相当于蓝图中的SetActorRotation节点
-        #     self.SetActorRotation(new_rotation, False)
-            
+        # 处理开始移动时的状态变化
+        if not old_is_moving and self.IsMoving:
+            # 如果刚开始移动且正在换弹，则取消换弹
+            if hasattr(self, '_is_reloading') and self._is_reloading:
+                ue.LogWarning("[换弹] 开始移动，取消换弹操作")
+                # 停止当前正在播放的换弹动画
+                if self.Mesh:
+                    anim_instance = self.Mesh.GetAnimInstance()
+                    if anim_instance and hasattr(anim_instance, 'Montage_Stop'):
+                        blend_out_time = 0.25
+                        anim_instance.Montage_Stop(blend_out_time)
+                # 重置换弹状态
+                self._reset_state("reload")
+
         # 处理连射模式逻辑
         if self.IsAutoFireMode and hasattr(self, 'IsAutoFiring') and self.IsAutoFiring:
             # 初始化LastAutoFireTime属性，如果不存在
@@ -1086,6 +1088,13 @@ class MyCharacter(ue.Character):
         
             if hasattr(self, '_is_reloading') and self._is_reloading:
                 ue.LogWarning("已经在换弹中，忽略重复操作")
+                return
+            
+            # 检查是否在移动或跑步中，如果是则不允许换弹
+            velocity = self.GetVelocity()
+            speed = velocity.Size()
+            if speed > 10.0:  # 角色正在移动
+                ue.LogWarning("移动或跑步中，无法换弹")
                 return
         
             # 检查是否有备用弹药可以装填
