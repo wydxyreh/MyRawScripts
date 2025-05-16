@@ -699,6 +699,10 @@ class MyCharacter(ue.Character):
             damage_type_name = damage_type.GetName() if damage_type and hasattr(damage_type, 'GetName') else "未知"
             ue.LogWarning(f"角色受到 {damage} 点伤害，伤害类型: {damage_type_name}，来源: {damage_causer_name}")
             
+            # 播放受击音效
+            self._play_sound("/Game/Sounds/BeDamaged")
+            ue.LogWarning("播放受击音效")
+            
             # 检查生命值是否小于等于0
             if self.CurrentHP <= 0:
                 # 处理角色死亡逻辑
