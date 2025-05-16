@@ -84,6 +84,9 @@ class MyCharacter(ue.Character):
     
         # 自动登录
         self._auto_login()
+        
+        # 设置连接状态监控
+        self._setup_connection_monitor()
     
     @ue.ufunction(BlueprintCallable=True, Category="Tick")
     def MyCharacterTick(self):
@@ -161,7 +164,7 @@ class MyCharacter(ue.Character):
                     # 设置标志以停止音乐循环线程
                     self.music_should_play = False
                     ue.LogWarning('已设置停止背景音乐循环')
-                
+                    
                     # 尝试停止所有声音（如果有可用的方法）
                     try:
                         ue.GameplayStatics.SetGlobalTimeDilation(self, 1.0)  # 确保时间膨胀正常
@@ -170,7 +173,18 @@ class MyCharacter(ue.Character):
                 
                 except Exception as audio_error:
                     ue.LogError(f'停止背景音乐失败: {str(audio_error)}')
-        
+            
+            # 停止连接监控
+            try:
+                if hasattr(self, '_should_monitor_connection'):
+                    self._should_monitor_connection = False
+                    ue.LogWarning('已停止连接状态监控')
+            except Exception as save_error:
+                import traceback
+                ue.LogError(f'停止连接监控失败: {str(save_error)}')
+                ue.LogError(traceback.format_exc())
+            
+            
             # 自动保存游戏数据
             try:
                 # 调用保存游戏数据的函数
@@ -2452,6 +2466,106 @@ class MyCharacter(ue.Character):
         ue.LogWarning(f"- 当前弹匣: {self.WeaopnBulletNumber}")
         ue.LogWarning(f"- 击杀敌人数: {self.KilledEnemies}")
     
+    # 登录相关
+    @ue.ufunction(BlueprintCallable=True, Category="Network")
+    def _check_connection_status(self):
+        """
+        定期检查连接状态和认证状态
+        检测是否在其他地方登录或被断开服务器连接
+        如果发生这些情况，自动返回到登录地图
+        """
+        try:
+            import ue_site
+            
+            # 获取网络状态单例
+            network_status = ue_site.network_status
+            
+            # 之前的连接状态
+            was_connected = hasattr(self, '_last_connected_status') and self._last_connected_status
+            was_authenticated = hasattr(self, '_last_auth_status') and self._last_auth_status
+            
+            # 当前连接状态
+            is_connected = network_status.is_connected if hasattr(network_status, 'is_connected') else False
+            is_authenticated = network_status.auth_status["is_authenticated"] if hasattr(network_status, 'auth_status') else False
+            
+            # 保存当前状态用于下次比较
+            self._last_connected_status = is_connected
+            self._last_auth_status = is_authenticated
+            
+            # 检测连接断开
+            if was_connected and not is_connected:
+                ue.LogWarning("[网络监控] 检测到服务器连接断开")
+                self._handle_connection_lost()
+                return
+                
+            # 检测认证状态变化（其他地方登录）
+            if was_authenticated and not is_authenticated:
+                ue.LogWarning("[网络监控] 检测到认证状态变化，可能在其他设备登录")
+                self._handle_auth_invalidated()
+                return
+                
+            # 检测被服务器踢出的情况
+            if network_status.client_entity and hasattr(network_status.client_entity, 'kicked'):
+                if network_status.client_entity.kicked:
+                    reason = network_status.client_entity.kick_reason if hasattr(network_status.client_entity, 'kick_reason') else "未知原因"
+                    ue.LogWarning(f"[网络监控] 被服务器踢出: {reason}")
+                    self._handle_kicked(reason)
+                    return
+                    
+        except ImportError:
+            ue.LogError("[网络监控] 导入ue_site模块失败")
+        except Exception as e:
+            import traceback
+            ue.LogError(f"[网络监控] 检查连接状态时出错: {str(e)}")
+            ue.LogError(traceback.format_exc())
+
+    def _handle_connection_lost(self):
+        """处理与服务器连接断开的情况"""
+        ue.LogWarning("[网络监控] 处理连接断开事件")
+        self._disconnect_from_server()  # 确保清理连接状态
+        self._open_start_map()  # 返回登录地图
+
+    def _handle_auth_invalidated(self):
+        """处理认证失效的情况（可能是在其他设备登录）"""
+        ue.LogWarning("[网络监控] 处理认证失效事件")
+        self._disconnect_from_server()
+        self._open_start_map()  # 返回登录地图
+
+    def _handle_kicked(self, reason):
+        """处理被服务器踢出的情况"""
+        ue.LogWarning(f"[网络监控] 处理被踢事件: {reason}")
+        self._disconnect_from_server()
+        self._open_start_map()  # 返回登录地图
+
+    def _setup_connection_monitor(self):
+        """设置连接监控定时器"""
+        import threading
+        import time
+        
+        # 检查间隔（秒）
+        check_interval = 5.0
+        
+        # 初始化状态
+        self._last_connected_status = False
+        self._last_auth_status = False
+        
+        # 设置标志，用于停止监控线程
+        self._should_monitor_connection = True
+        
+        def monitor_loop():
+            while hasattr(self, '_should_monitor_connection') and self._should_monitor_connection:
+                self._check_connection_status()
+                time.sleep(check_interval)
+        
+        # 创建并启动监控线程
+        monitor_thread = threading.Thread(target=monitor_loop, daemon=True)
+        monitor_thread.start()
+        
+        ue.LogWarning("[网络监控] 已启动连接状态监控")
+        
+        # 保存线程引用
+        self._monitor_thread = monitor_thread
+
     # 移动
     def _move_forward(self, value):
         if value != 0:
